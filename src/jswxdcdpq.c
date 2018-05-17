@@ -338,7 +338,7 @@ else
 	}	
 /* stack along Frenel */
  memset((void *) stk1, 0,nt*FSIZE);
- for(it=0;it<nt;it++)
+ /*for(it=0;it<nt;it++)
 	{
 	 atmp2=0;
 	 for(itr=angx[it];itr<nx;itr++)		
@@ -381,9 +381,8 @@ else
 		stk1[it]+=datact[itr][it];
 	 minkjj[it]=(minkjj[it]-hntr)/iasmp;
 	 maxkjj[it]=(maxkjj[it]-hntr)/iasmp;
-	}
+	}*/
 
- /*memset((void *) stk1, 0,nt*FSIZE);
  for(it=0;it<nt;it++)
 	{
 	 atmp1=0;
@@ -399,18 +398,17 @@ else
 	 atmp2=0;
 	 for(itr=angx[it];itr>0;itr--)
 		{
-		 atmp1+=datact[itr][it];
+		 atmp2+=datact[itr][it];
 		 if(fabs(datact[itr][it]/atmp2)<0.03)
 			{	
-			 maxkjj[it]=(itr-hntr)/iasmp;
+			 minkjj[it]=(itr-hntr)/iasmp;
 		 	 break;
 			}
 		}
 	 stk1[it]=atmp1+atmp2;
-	}*/
+	}
 
- /*memset((void *) stk1, 0,nt*FSIZE);
- for(it=0;it<nt;it++)
+ /*for(it=0;it<nt;it++)
 	{
 	 atmp2=0;
 	 for(itr=angx[it];itr<nx;itr++)		
@@ -437,8 +435,7 @@ else
 	 stk1[it]=atmp2+atmp3;
 	}*/
 
- /*memset((void *) stk1, 0,nt*FSIZE);
- for(it=0;it<nt;it++)
+ /*for(it=0;it<nt;it++)
 	{
 	 T0=it*dt;
 	 Tofd=T0*fd*2;
