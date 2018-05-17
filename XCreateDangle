@@ -1,0 +1,17 @@
+#! /bin/sh
+
+####2D common offset prestack time migration
+# set parameter
+indata=datash.off.su
+path=/home/CY/倾角扫描/拆分/生成道集
+vfile=vrmstsh
+parfile=fdmodpardata.dat
+outdata=datashmt.su
+
+#excute migration
+./CreateDangle<$indata path=$path vfile=$vfile parfile=$parfile>$outdata
+
+#display result
+#suximage<$outdata perc=99.8&
+
+exit

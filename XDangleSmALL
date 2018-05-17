@@ -1,0 +1,18 @@
+#! /bin/sh
+
+####2D common offset prestack time migration
+# set parameter
+indata=datash.off.su
+path=/home/CY/倾角扫描/整体
+vfile=vrmstsh
+parfile=fdmodpardatax.dat
+outdata=allm60.su
+verbose=1
+
+#excute migration
+./DangleSmALL<$indata path=$path vfile=$vfile parfile=$parfile verbose=$verbose>$outdata
+
+#display result
+suximage<$outdata perc=99.8&
+
+exit

@@ -1,0 +1,20 @@
+#! /bin/sh
+
+####2D common offset prestack time migration
+# set parameter
+indata=datashx.off.su
+path=/home/CY/输入道倾角偏移/输出CMP道集
+vfile=vrmstsh
+kjfile1=kjminc
+kjfile2=kjmaxc
+parfile=fdmodpardata.dat
+outdata=datasrdmtxckj.su
+verbose=1
+
+#excute migration
+./srdmigA<$indata path=$path vfile=$vfile kjfile1=$kjfile1 kjfile2=$kjfile2 parfile=$parfile verbose=$verbose >$outdata
+
+#display result
+#suximage<$outdata perc=99.8&
+
+exit
