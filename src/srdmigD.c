@@ -74,24 +74,20 @@ main(int argc, char **argv)
  float cdp;						/* coordinate of cdp					*/
  float f1,f2,f3,f4;				/* array of filter frequencies          */   
  int *anapx;					/* coordinate of cdp for image space	*/
- int sx,gx;					/* coordinate of shot and geophone  	*/
- int oldoffset;				/* offset for group devided	and output	*/
- int offset,h;				/* offset and half of that				*/
+ int sx,gx;						/* coordinate of shot and geophone  	*/
+ int offset,h;					/* offset and half of that				*/
  int tritvl;					/* trace interval						*/
- int anapxmin;				/* min coordinate of imaging point		*/ 
- int anapxmax;				/* max coordinate of imaging point		*/
+ int anapxmin;					/* min coordinate of imaging point		*/ 
+ int anapxmax;					/* max coordinate of imaging point		*/
  int anapxdx;					/* spacing between imaging point		*/
  int startmt;					/* the start time for migration			*/
  int nstartmt;					/* nstartmt=startmt/dT					*/
- int endmt;					/* the end time for migration			*/
+ int endmt;						/* the end time for migration			*/
  int nendmt;					/* nendmt=endmt/D=dT					*/
  int itr,ix,ipx,it; 			/* count number                         */
  int icdp;						/* count number                         */
  int nf1,nf2,nf3,nf4;           /* nf1=(int)(f1/df)                     */
  int napmin;					/* napmin=(int)(anapxmin/anapxdx)		*/
- int oldcdp=0;	            	/* for temporary storage		        */
- int olddeltacdp=1;				/* for temporary storage                */
- int deltacdp;
  int bgc,edc;					/* begin and end of imaging	trace		*/		
  int mincdp,maxcdp;				/* mincdp and maxcdp of data input		*/
  int mincdpout;					/* the min cdp to output(image space)	*/
@@ -100,7 +96,6 @@ main(int argc, char **argv)
  int firstcdp=0;	            /* first cdp in velocity file	    	*/
  int lastcdp=0;	                /* last cdp in velocity file	    	*/
  int ncdp;	                	/* number of cdps in the velocity file	*/ 
- int dcdp=0;	                /* number of cdps between consecutive traces */
  int nt;                		/* number of points on input trace      */
  int ntr;						/* number of trace input				*/
  int npx;						/* number of trace of imaging sapce		*/
@@ -131,7 +126,6 @@ main(int argc, char **argv)
 /* Get info from first trace */ 
  if (!gettr(&tri))  err("can't get first trace");
  nt = tri.ns;
- oldoffset=tri.offset;
  seismic = ISSEISMIC(tri.trid);		
  if (seismic) 
 	{
@@ -195,36 +189,15 @@ main(int argc, char **argv)
  do 
 	{
 	 ++ntr;
-	 /* get new deltacdp value */
-	 deltacdp=tri.cdp-oldcdp;
-
 	 /* read headers and data */
 	 efwrite(&tri,HDRBYTES, 1, hfp);
 	 efwrite(tri.data, FSIZE, nt, tracefp);
 
-	 /* error trappings. */
-	 /* ...did cdp value interval change? */
-	 if ((ntr>3) && (olddeltacdp!=deltacdp)) 
-		{
-		 if (verbose) 
-			{
-			 warn("cdp interval changed in data");	
-			 warn("ntr=%d olddeltacdp=%d deltacdp=%d",ntr,olddeltacdp,deltacdp);
-		 	 check_cdp=cwp_true;
-			}
-		}
-		
-	 /* save cdp and deltacdp values */
-	 oldcdp=tri.cdp;
-	 olddeltacdp=deltacdp;
 	} while (gettr(&tri));
 	warn("ntr=%d",ntr);
-/* get last cdp  and dcdp */
- if (!getparint("dcdp",&dcdp))	dcdp=deltacdp;
- warn("dcp=%d",dcdp);
+
 /* error trappings */
  if ( (firstcdp==lastcdp) 
-	|| (dcdp==0)
 	|| (check_cdp==cwp_true) )	warn("Check cdp values in data!");
 
 /* rewind trace file pointer and header file pointer */
@@ -313,15 +286,13 @@ for(itr=0; itr<ntr; ++itr)
 	 pfarc(1,nfft,rt,ct);
 	 for(ix=0;ix<nf;ix++) 
 		{	
-		 if(ix>=nf1&&ix<nf4)	ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+		 if(ix>=nf1&&ix<nf4)
+			{
+			ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+			ct[ix]=crmul(ct[ix],sqrt(ix*dw));
+         	ct[ix]=cmul(ct[ix],hd[ix]);
+			}
 		 else	ct[ix].r=ct[ix].i=0.0;
-		}
-
-	/* multiply by the half derivative*/ 
-	 for(ix=0;ix<nf;ix++)
-		{
-		 ct[ix]=crmul(ct[ix],sqrt(ix*dw));
-         ct[ix]=cmul(ct[ix],hd[ix]);
 		}
 	 pfacr(-1,nfft,ct,rtx);
 	 for(it=0;it<nt;it++)
@@ -360,23 +331,22 @@ for(itr=0; itr<ntr; ++itr)
 			}
 		}
 	}
-	memset ((void *) &tro, (int) '\0', sizeof (tro));
- 	tro.trid = 1;
- 	tro.counit = 1;
-	tro.f2=mincdp*anapxdx;
-	tro.d2 = anapxdx;
-    tro.ns = nt;
-    tro.dt = dt*1000000;
-	/* Output migrated data */
-	mincdpo=mincdp;
- 	for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
-    	{
-     	tro.cdp = mincdpo;
-     	tro.offset=fabs(oldoffset);
-     	memcpy ((void *) tro.data, (const void *)  mig[ipx],sizeof (float) * nt);
-     	puttr(&tro);
-     	mincdpo++;
-    	}
+ memset ((void *) &tro, (int) '\0', sizeof (tro));
+ tro.trid = 1;
+ tro.counit = 1;
+ tro.f2=mincdp*anapxdx;
+ tro.d2 = anapxdx;
+ tro.ns = nt;
+ tro.dt = dt*1000000;
+/* Output migrated data */
+ mincdpo=mincdp;
+ for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
+    {
+     tro.cdp = mincdpo;
+     memcpy ((void *) tro.data, (const void *)  mig[ipx],sizeof (float) * nt);
+     puttr(&tro);
+     mincdpo++;
+    }
  time(&t2);
  warn("time consuming in second = %f\n",difftime(t2,t1));
 /*free array*/

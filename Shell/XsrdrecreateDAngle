@@ -3,7 +3,7 @@
 ####2D common offset prestack time migration
 # set parameter
 indata=datashx.off.su
-path=/home/CY/扫描孔径倾角道集
+path=/home/CY/扫描孔径倾角道集/输入道
 vfile=vrmstsh
 kjfile1=kjmin
 kjfile2=kjmax

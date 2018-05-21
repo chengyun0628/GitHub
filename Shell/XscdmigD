@@ -5,16 +5,16 @@
 indata=232.su
 path=/home/CY/输出道倾角偏移/单偏移距
 vfile=vrmstsh
-kjfile1=kjmins
-kjfile2=kjmaxs
+kjfile1=kjmin
+kjfile2=kjmax
 parfile=fdmodpardata.dat
-outdata=232scdmts.su
+outdata=232scdmt.su
 verbose=1
 
 #excute migration
 ./scdmigD<$indata path=$path vfile=$vfile kjfile1=$kjfile1 kjfile2=$kjfile2 parfile=$parfile verbose=$verbose >$outdata
 
 #display result
-#suximage<$outdata perc=99.8&
+suximage<$outdata perc=99.8&
 
 exit

@@ -5,14 +5,14 @@
 indata=datashx.off.su
 path=/home/CY/输入道倾角偏移/输出CMP道集
 vfile=vrmstsh
-kjfile1=kjminc
-kjfile2=kjmaxc
+kjfile1=kjmin
+kjfile2=kjmax
 parfile=fdmodpardata.dat
-outdata=datasrdmtxckj.su
+outdata=datasrdmt.su
 verbose=1
 
 #excute migration
-./srdmigA<$indata path=$path vfile=$vfile kjfile1=$kjfile1 kjfile2=$kjfile2 parfile=$parfile verbose=$verbose >$outdata
+./srdmigAcmp<$indata path=$path vfile=$vfile kjfile1=$kjfile1 kjfile2=$kjfile2 parfile=$parfile verbose=$verbose >$outdata
 
 #display result
 #suximage<$outdata perc=99.8&

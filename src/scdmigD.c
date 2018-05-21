@@ -72,7 +72,6 @@ main(int argc, char **argv)
  float vtt;						/* vtt=vt*vt							*/
  float f1,f2,f3,f4;				/* array of filter frequencies          */   
  int sx,gx;						/* coordinate of shot and geophone  	*/
- int oldoffset;					/* offset for group devided	and output	*/
  int offset,h;					/* offset and half of that				*/
  int *anapx;					/* coordinate of cdp for image space	*/
  int anapxmin;					/* min coordinate of imaging point		*/ 
@@ -129,7 +128,7 @@ main(int argc, char **argv)
 /* Get info from first trace */ 
  if (!gettr(&tri))  err("can't get first trace");
  nt = tri.ns;
- oldoffset=tri.offset;
+ offset=tri.offset;
  seismic = ISSEISMIC(tri.trid);		
  if (seismic) 
 	{
@@ -298,19 +297,17 @@ for(itr=0; itr<ntr; itr++)
 	 memset((void *) rtx, 0, nfft*FSIZE);
 	 memset((void *) ct, 0, nf*FSIZE);
 
-	/* filtering the input trace*/
+	/* filtering the input trace and multiply by the half derivative*/
 	 pfarc(1,nfft,rt,ct);
 	 for(ix=0;ix<nf;ix++) 
 		{	
-		 if(ix>=nf1&&ix<nf4)	ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+		 if(ix>=nf1&&ix<nf4)	
+			{
+			ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+			ct[ix]=crmul(ct[ix],sqrt(ix*dw));
+         	ct[ix]=cmul(ct[ix],hd[ix]);
+			}
 		 else	ct[ix].r=ct[ix].i=0.0;
-		}
-
-	/* multiply by the half derivative*/ 
-	 for(ix=0;ix<nf;ix++)
-		{
-		 ct[ix]=crmul(ct[ix],sqrt(ix*dw));
-         ct[ix]=cmul(ct[ix],hd[ix]);
 		}
 	 pfacr(-1,nfft,ct,rtx);
 	 for(it=0;it<nt;it++)
@@ -319,7 +316,7 @@ for(itr=0; itr<ntr; itr++)
 /* Start the migration process */
 /* Loop over input trace */
  warn("Starting migration process...\n");
- h=oldoffset/2;
+ h=offset/2;
  for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
 	{
 	 T=nstartmt*hdt;
@@ -330,25 +327,25 @@ for(itr=0; itr<ntr; itr++)
 		 vt=v*T;
 		 vtt=vt*vt;
 		 aperture(it,ipx,mincdpout,maxcdpout,&bgc,&edc,anapxdx,vt,vtt,h,kjmin[ipx-firstcdp+napmin],kjmax[ipx-firstcdp+napmin]);
-		 /*--------------------------------------------*/
 		 nbj=(edc-bgc+1)*0.2;
 		 nbj1=(bgc-nbj)>mincdpout?nbj:(bgc-mincdpout);
 		 nbj2=(edc+nbj)<maxcdpout?nbj:(maxcdpout-edc);
-		 sx=(bgc+napmin-nbj1-dcdp)*anapxdx-h;
-		 nbj1=floor(nbj1/dcdp);
-		 nbj2=floor(nbj2/dcdp);
-		 bgc=ceil((bgc+napmin-mincdp)/dcdp);
-		 edc=floor((edc+napmin-mincdp)/dcdp);
-		 nbj=edc-bgc+nbj1;
+		 if((bgc-nbj1-mincdpout)%dcdp!=0)	bgc=(bgc-nbj1-mincdpout)/dcdp+1;
+		 else	bgc=(bgc-nbj1-mincdpout)/dcdp;
+		 edc=(edc+nbj2-mincdpout)/dcdp;
+		 sx=(mincdpout+napmin+(bgc-1)*dcdp)*anapxdx-h;
+		 nbj1=nbj1/dcdp;
+		 nbj2=nbj2/dcdp;	
+		 nbj=edc-bgc-nbj2;
 		 ix=0;
-		 for(itr=bgc-nbj1;itr<=edc+nbj2;itr++)
+		 for(itr=bgc;itr<=edc;itr++)
 			{
 			 if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
 			 else if(ix>nbj)	p=cos(1.570796*(ix-nbj)/nbj2);
 			 else p=1.0;
 			 ix++;
 			 sx=sx+dcdp*anapxdx;
-		 	 gx=sx+oldoffset;
+		 	 gx=sx+offset;
 			 tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
              if(ttt>=tmax)   continue;
              windtr(nt,data[itr],ttt,dt,&firstt,datal);
@@ -357,7 +354,6 @@ for(itr=0; itr<ntr; itr++)
              	  0.0, 0.0, 1, &ttt, &va);
 			 mig[ipx][it]+=va*qtmp*p;
 			}
-		 /*--------------------------------------------*/
 		}
 	}
 	memset ((void *) &tro, (int) '\0', sizeof (tro));
@@ -372,7 +368,6 @@ for(itr=0; itr<ntr; itr++)
  	for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
     	{
      	tro.cdp = mincdpo;
-     	tro.offset=fabs(oldoffset);
      	memcpy ((void *) tro.data, (const void *)  mig[ipx],sizeof (float) * nt);
      	puttr(&tro);
      	mincdpo++;
@@ -430,17 +425,17 @@ void aperture(int it,int icdp,int mincdpout,int maxcdpout,int *bgc,int *edc,int 
 	{
  	tanp=tan(ang)*tan(ang);
  	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*bgc=MAX(mincdpout,icdp + ceil(x/anapxdx));
+ 	*edc=MIN(maxcdpout,icdp - ceil(x/anapxdx));
 	}
- else	*bgc=icdp;
+ else	*edc=icdp;
  ang=angx2[it]*PI*0.005556;
  if(ang<-0.00001 || ang>0.00001)
 	{
  	tanp=tan(ang)*tan(ang);
  	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*edc=MIN(maxcdpout,icdp + ceil(x/anapxdx));
+ 	*bgc=MAX(mincdpout,icdp - ceil(x/anapxdx));
 	}
- else	*edc=icdp;
+ else	*bgc=icdp;
 }
 
 void tanda(int ipx,int *anapx,int sx,int gx,float v,float vtt,float *ttt,float *qtmp)

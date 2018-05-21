@@ -56,7 +56,7 @@ main(int argc, char **argv)
  float **vel=NULL;              /* array for storing velocity           */
  float **kjmin=NULL;            /* array for storing the min aperture   */
  float **kjmax=NULL;            /* array for storing the max aperture   */
- float **mig=NULL;				/* array for storing migrated result	*/
+ float **mig=NULL;				/* array for storing imaging gather		*/
  float ttt;						/* Travel time							*/
  float qtmp;					/* Amptitude of migration				*/	
  float va;    					/* ununiform sampled value				*/ 
@@ -94,8 +94,8 @@ main(int argc, char **argv)
  int nstartmt;					/* nstartmt=startmt/dT					*/
  int endmt;						/* the end time for migration			*/
  int nendmt;					/* nendmt=endmt/D=dT					*/
- int itr,ix,ipx,it,jx; 			/* count number                         */
  int icdp;						/* count number                         */
+ int itr,ix,ipx,it,jx; 			/* count number                         */
  int nf1,nf2,nf3,nf4;           /* nf1=(int)(f1/df)                     */
  int bgc,edc;					/* begin and end of imaging	trace		*/		
  int mincdp,maxcdp;				/* mincdp and maxcdp of data input		*/
@@ -324,30 +324,28 @@ for(itr=0; itr<ntr; itr++)
 	 memset((void *) rtx, 0, nfft*FSIZE);
 	 memset((void *) ct, 0, nf*FSIZE);
 
-	/* filtering the input trace*/
+	/* filtering the input trace and multiply by the half derivative*/
 	 pfarc(1,nfft,rt,ct);
 	 for(ix=0;ix<nf;ix++) 
 		{	
-		 if(ix>=nf1&&ix<nf4)	ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+		 if(ix>=nf1&&ix<nf4)	
+			{
+			ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+			ct[ix]=crmul(ct[ix],sqrt(ix*dw));
+			ct[ix]=cmul(ct[ix],hd[ix]);
+			}
 		 else	ct[ix].r=ct[ix].i=0.0;
-		}
-
-	/* multiply by the half derivative*/ 
-	 for(ix=0;ix<nf;ix++)
-		{
-		 ct[ix]=crmul(ct[ix],sqrt(ix*dw));
-         ct[ix]=cmul(ct[ix],hd[ix]);
 		}
 	 pfacr(-1,nfft,ct,rtx);
 	 for(it=0;it<nt;it++)
 		data[itr][it]=rtx[it]/nfft;
 	}
  warn("Starting migration process...\n");
-for(ix=0;ix<jx;ix++)
+ for(ix=0;ix<jx;ix++)
 	{
 	 offset=offx[ix];
 	 h=offset*0.5;
-	 for(ipx=mincdpout; ipx<maxcdpout; ++ipx)
+	 for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
 		{
 	 	T=nstartmt*hdt;
 	 	for(it=nstartmt;it<nendmt;it++)
@@ -360,14 +358,15 @@ for(ix=0;ix<jx;ix++)
 			nbj=(edc-bgc+1)*0.2;
 		 	nbj1=(bgc-nbj)>mincdpx[ix]?nbj:(bgc-mincdpx[ix]);
 		 	nbj2=(edc+nbj)<maxcdpx[ix]?nbj:(maxcdpx[ix]-edc);
-			sx=(bgc+napmin-nbj1-dcdp[ix])*anapxdx-h;
+			if((bgc-nbj1-mincdpx[ix])%dcdp[ix]!=0)	bgc=(bgc-nbj1-mincdpx[ix])/dcdp[ix]+1;
+			else	bgc=(bgc-nbj1-mincdpx[ix])/dcdp[ix];
+			edc=(edc+nbj2-mincdpx[ix])/dcdp[ix];
+			sx=(mincdpx[ix]+napmin+(bgc-1)*dcdp[ix])*anapxdx-h;
 		 	nbj1=nbj1/dcdp[ix];
-		 	nbj2=nbj2/dcdp[ix];
-		 	bgc=ceil((bgc-mincdpx[ix])/dcdp[ix]);
-		 	edc=(edc-mincdpx[ix])/dcdp[ix];
-			nbj=edc-bgc+nbj1;
+		 	nbj2=nbj2/dcdp[ix];	
+			nbj=edc-bgc-nbj2;
 			KG=0;
-		 	for(itr=offarr[ix]+bgc-nbj1;itr<=offarr[ix]+edc+nbj2;itr++)
+		 	for(itr=offarr[ix]+bgc;itr<=offarr[ix]+edc;itr++)
 				{
 				if(KG<nbj1)	p=sin(1.570796*KG/nbj1);
 			 	else if(KG>nbj)	p=cos(1.570796*(KG-nbj)/nbj2);
@@ -375,33 +374,34 @@ for(ix=0;ix<jx;ix++)
 			 	KG++;
 			 	sx=sx+dcdp[ix]*anapxdx;
 		 	 	gx=sx+offset;
+				icdp=(sx+gx)/2/anapxdx-napmin;
 			 	tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
              	if(ttt>=tmax)   continue;
              	windtr(nt,data[itr],ttt,dt,&firstt,datal);
 			 /* sinc interpolate new data */
          	 	ints8r(8, dt, firstt, datal,
              	  	0.0, 0.0, 1, &ttt, &va);
-			 	mig[ipx][it]+=va*qtmp*p;
+				mig[ipx][it]+=va*qtmp*p;
 				}
 			}
 		}
 	}
-	memset ((void *) &tro, (int) '\0', sizeof (tro));
- 	tro.trid = 1;
- 	tro.counit = 1;
-	tro.f2=mincdp*anapxdx;
-	tro.d2 = anapxdx;
-    tro.ns = nt;
-    tro.dt = dt*1000000;
-	/* Output migrated data */
-	mincdpo=mincdp;
- 	for(ipx=mincdpout; ipx<maxcdpout; ++ipx)
-    	{
-     	tro.cdp = mincdpo;
-		memcpy ((void *) tro.data, (const void *)  mig[ipx],sizeof (float) * nt);
-     	puttr(&tro);
-     	mincdpo++;
-    	}
+ memset ((void *) &tro, (int) '\0', sizeof (tro));
+ tro.trid = 1;
+ tro.counit = 1;
+ tro.f2=mincdp*anapxdx;
+ tro.d2 = anapxdx;
+ tro.ns = nt;
+ tro.dt = dt*1000000;
+/* Output migrated data */
+ mincdpo=mincdp;
+ for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
+    {
+     tro.cdp = mincdpo;
+     memcpy ((void *) tro.data, (const void *)  mig[ipx],sizeof (float) * nt);
+     puttr(&tro);
+     mincdpo++;
+    }
  time(&t2);
  warn("time consuming in second = %f\n",difftime(t2,t1));
 /*free array*/
@@ -460,17 +460,17 @@ void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,int anapxd
 	{
  	tanp=tan(ang)*tan(ang);
  	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*bgc=MAX(mincdp,icdp + ceil(x/anapxdx));
+ 	*edc=MIN(maxcdp,icdp - ceil(x/anapxdx));
 	}
- else	*bgc=icdp;
+ else	*edc=icdp;
  ang=angx2[it]*PI*0.005556;
  if(ang<-0.00001 || ang>0.00001)
 	{
  	tanp=tan(ang)*tan(ang);
  	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*edc=MIN(maxcdp,icdp + ceil(x/anapxdx));
+ 	*bgc=MAX(mincdp,icdp - ceil(x/anapxdx));
 	}
- else	*edc=icdp;
+ else	*bgc=icdp;
 }
 
 void tanda(int ipx,int *anapx,float sx,float gx,float v,float vtt,float *ttt,float *qtmp)

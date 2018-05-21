@@ -81,7 +81,6 @@ main(int argc, char **argv)
  int ximg;
  int *anapx;					/* coordinate of cdp for image space	*/
  int sx,gx;						/* coordinate of shot and geophone  	*/
- int oldoffset;					/* offset for group devided	and output	*/
  int offset,h;					/* offset and half of that				*/
  int tritvl;					/* trace interval						*/
  int anapxmin;					/* min coordinate of imaging point		*/ 
@@ -138,7 +137,6 @@ main(int argc, char **argv)
 /* Get info from first trace */ 
  if (!gettr(&tri))  err("can't get first trace");
  nt = tri.ns;
- oldoffset=tri.offset;
  seismic = ISSEISMIC(tri.trid);		
  if (seismic) 
 	{
@@ -301,19 +299,17 @@ for(itr=0; itr<ntr; ++itr)
 	 memset((void *) rtx, 0, nfft*FSIZE);
 	 memset((void *) ct, 0, nf*FSIZE);
 
-	/* filtering the input trace*/
+	/* filtering the input trace and multiply by the half derivative*/
 	 pfarc(1,nfft,rt,ct);
 	 for(ix=0;ix<nf;ix++) 
 		{	
-		 if(ix>=nf1&&ix<nf4)	ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+		 if(ix>=nf1&&ix<nf4)
+			{
+			ct[ix]=crmul(ct[ix],filter[ix-nf1]);
+			ct[ix]=crmul(ct[ix],sqrt(ix*dw));
+         	ct[ix]=cmul(ct[ix],hd[ix]);
+			}
 		 else	ct[ix].r=ct[ix].i=0.0;
-		}
-
-	/* multiply by the half derivative*/ 
-	 for(ix=0;ix<nf;ix++)
-		{
-		 ct[ix]=crmul(ct[ix],sqrt(ix*dw));
-         ct[ix]=cmul(ct[ix],hd[ix]);
 		}
 	 pfacr(-1,nfft,ct,rtx);
 	 for(it=0;it<nt;it++)
