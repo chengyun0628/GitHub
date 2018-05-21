@@ -27,3 +27,6 @@ XscdmigA scdmigA.c的可执行壳文件
 
 srdrecreateDAngle.c 采用jswxdcdpq.c或DangleSmALL.c生成的倾角信息，进行输入道全偏移距偏移，并再次生成倾角道集，验证算法
 XsrdrecreateDAngle srdrecreateDAngle.c的可执行壳文件
+
+scdrecreateDAngle.c 采用jswxdcdpq.c或DangleSmALL.c生成的倾角信息，进行输出道全偏移距偏移，并再次生成倾角道集，验证算法
+XscdrecreateDAngle scdrecreateDAngle.c的可执行壳文件
