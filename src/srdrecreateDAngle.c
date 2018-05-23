@@ -112,7 +112,7 @@ main(int argc, char **argv)
  int nfft;                      /* number of points for fft trace       */
  int nf;                        /* number of frequencies (incl Nyq)     */
  int verbose;		            /* flag to get advisory messages	    */
- int nbj,nbj1,nbj2;
+ int nbjl,nbjr,nbj1,nbj2;
 
 /* file name */
  char str[100],*path;
@@ -327,39 +327,108 @@ for(itr=0; itr<ntr; ++itr)
 		 vt=v*T;
 		 vtt=vt*vt;
 		 aperture(it,icdp,mincdpout,maxcdpout,&bgc,&edc,anapxdx,vt,vtt,h,kjmin[icdp-firstcdp+napmin],kjmax[icdp-firstcdp+napmin]);
-		 nbj=(edc-bgc+1)*0.2;
-		 nbj1=(bgc-nbj)>mincdpout?nbj:(bgc-mincdpout);
-		 nbj2=(edc+nbj)<maxcdpout?nbj:(maxcdpout-edc);
-		 nbj=edc-bgc+nbj1;
+		 nbjl=(edc-bgc+1)*0.2;
+		 nbj1=(bgc-nbjl)>mincdpout?nbjl:(bgc-mincdpout);
+		 nbj2=(edc+nbjl)<maxcdpout?nbjl:(maxcdpout-edc);
+		 bgc=bgc-nbj1;
+		 edc=edc+nbj2;
+		 nbjl=edc-bgc-nbj1;
+		 nbjr=edc-bgc-nbj2;
 		 ix=0;
-		 for(ipx=bgc-nbj1;ipx<=edc+nbj2;ipx++)
-			{
-			 if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
-			 else if(ix>nbj)	p=cos(1.570796*(ix-nbj)/nbj2);
-			 else p=1.0;
-			 ix++;
-			 tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
-             if(ttt>=tmax)   break;
-             windtr(nt,rtx,ttt,dt,&firstt,datal);
-			 /* sinc interpolate new data */
-         	 ints8r(8, dt, firstt, datal,
-             	  0.0, 0.0, 1, &ttt, &va);
-			 ximg=(ipx-icdp)*anapxdx;
-			 if (ximg==0)	aglerst[icdp][hmaxnthit][it]+=va;
-			 else if (ximg<0)
+		 if(icdp>edc)		
+		 	for(ipx=edc;ipx>=bgc;ipx--) 
 				{
-				 ximg=-ximg;
-			 	 calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
-				 if(nthit==1000000)	break;
-				 aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+				v=vel[ipx-firstcdp+napmin][it];
+	 			vt=v*T;
+	 			vtt=vt*vt;
+     			tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             	if(ttt>=tmax)   break;
+             	windtr(nt,rtx,ttt,dt,&firstt,datal);
+         	 	ints8r(8, dt, firstt, datal,
+             	  	0.0, 0.0, 1, &ttt, &va);
+			 	if(ix<nbj2)	p=sin(1.570796*ix/nbj2);
+			 	else if(ix>nbjl)	p=cos(1.570796*(ix-nbjl)/nbj1);
+			 	else p=1.0;
+			 	ix++;
+			 	ximg=(ipx-icdp)*anapxdx;
+			 	if (ximg==0)	aglerst[icdp][hmaxnthit][it]+=va;
+			 	else if (ximg<0)
+					{
+				 	ximg=-ximg;
+			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 	if(nthit==1000000)	break;
+				 	aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+					}
+			 	else
+					{
+			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 	if(nthit==1000000)	break;
+				 	aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+					}
 				}
-			 else
+		 else if(icdp<bgc)
+			for(ipx=bgc;ipx<=edc;ipx++) 
 				{
-			 	 calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
-				 if(nthit==1000000)	break;
-				 aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+				v=vel[ipx-firstcdp+napmin][it];
+	 			vt=v*T;
+	 			vtt=vt*vt;
+     			tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             	if(ttt>=tmax)   break;
+             	windtr(nt,rtx,ttt,dt,&firstt,datal);
+         	 	ints8r(8, dt, firstt, datal,
+             	  	0.0, 0.0, 1, &ttt, &va);
+			 	if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
+			 	else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
+			 	else p=1.0;
+			 	ix++;
+			 	ximg=(ipx-icdp)*anapxdx;
+			 	if (ximg==0)	aglerst[icdp][hmaxnthit][it]+=va;
+			 	else if (ximg<0)
+					{
+				 	ximg=-ximg;
+			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 	if(nthit==1000000)	break;
+				 	aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+					}
+			 	else
+					{
+			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 	if(nthit==1000000)	break;
+				 	aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+					}
 				}
-			}
+		 else
+			for(ipx=bgc;ipx<=edc;ipx++) 
+				{
+				v=vel[ipx-firstcdp+napmin][it];
+	 			vt=v*T;
+	 			vtt=vt*vt;
+     			tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             	if(ttt>=tmax)   continue;
+             	windtr(nt,rtx,ttt,dt,&firstt,datal);
+         	 	ints8r(8, dt, firstt, datal,
+             	  	0.0, 0.0, 1, &ttt, &va);
+			 	if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
+			 	else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
+			 	else p=1.0;
+			 	ix++;
+			 	ximg=(ipx-icdp)*anapxdx;
+			 	if (ximg==0)	aglerst[icdp][hmaxnthit][it]+=va;
+			 	else if (ximg<0)
+					{
+				 	ximg=-ximg;
+			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 	if(nthit==1000000)	break;
+				 	aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+					}
+			 	else
+					{
+			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 	if(nthit==1000000)	break;
+				 	aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+					}
+				}
+
 		}
 	}
  memset ((void *) &tro, (int) '\0', sizeof (tro));

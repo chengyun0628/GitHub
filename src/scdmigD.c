@@ -70,6 +70,7 @@ main(int argc, char **argv)
  float v;						/* velocity								*/
  float vt;						/* vt=v*T								*/
  float vtt;						/* vtt=vt*vt							*/
+ float ipxb;
  float f1,f2,f3,f4;				/* array of filter frequencies          */   
  int sx,gx;						/* coordinate of shot and geophone  	*/
  int offset,h;					/* offset and half of that				*/
@@ -104,7 +105,7 @@ main(int argc, char **argv)
  int nfft;                      /* number of points for fft trace       */
  int nf;                        /* number of frequencies (incl Nyq)     */
  int verbose;		            /* flag to get advisory messages	    */
- int nbj,nbj1,nbj2;
+ int nbjl,nbjr,nbj1,nbj2;
 /* file name */
  char str[100],*path;
  char *vfile="";
@@ -327,21 +328,82 @@ for(itr=0; itr<ntr; itr++)
 		 vt=v*T;
 		 vtt=vt*vt;
 		 aperture(it,ipx,mincdpout,maxcdpout,&bgc,&edc,anapxdx,vt,vtt,h,kjmin[ipx-firstcdp+napmin],kjmax[ipx-firstcdp+napmin]);
-		 nbj=(edc-bgc+1)*0.2;
-		 nbj1=(bgc-nbj)>mincdpout?nbj:(bgc-mincdpout);
-		 nbj2=(edc+nbj)<maxcdpout?nbj:(maxcdpout-edc);
+		 nbjl=(edc-bgc+1)*0.2;
+		 nbj1=(bgc-nbjl)>mincdpout?nbjl:(bgc-mincdpout);
+		 nbj2=(edc+nbjl)<maxcdpout?nbjl:(maxcdpout-edc);
 		 if((bgc-nbj1-mincdpout)%dcdp!=0)	bgc=(bgc-nbj1-mincdpout)/dcdp+1;
 		 else	bgc=(bgc-nbj1-mincdpout)/dcdp;
 		 edc=(edc+nbj2-mincdpout)/dcdp;
-		 sx=(mincdpout+napmin+(bgc-1)*dcdp)*anapxdx-h;
 		 nbj1=nbj1/dcdp;
 		 nbj2=nbj2/dcdp;	
-		 nbj=edc-bgc-nbj2;
+		 nbjl=edc-bgc-nbj1;
+		 nbjr=edc-bgc-nbj2;
+		 ipxb=(ipx-mincdpout)/dcdp;
 		 ix=0;
+		 /*------------------------------------------------------*/
+		 if(ipxb>edc)		
+			{
+			sx=(mincdpout+napmin+(edc+1)*dcdp)*anapxdx-h;
+		 	for(itr=edc;itr>=bgc;itr--) 
+				{
+				sx=sx-dcdp*anapxdx;
+		 	 	gx=sx+offset;
+     			tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             	if(ttt>=tmax)   break;
+             	windtr(nt,data[itr],ttt,dt,&firstt,datal);
+         	 	ints8r(8, dt, firstt, datal,
+             	  	0.0, 0.0, 1, &ttt, &va);
+			 	if(ix<nbj2)	p=sin(1.570796*ix/nbj2);
+			 	else if(ix>nbjl)	p=cos(1.570796*(ix-nbjl)/nbj1);
+			 	else p=1.0;
+			 	ix++;
+			 	mig[ipx][it]+=va*qtmp*p;
+				}
+			}
+		 else if(ipxb<bgc)
+			{
+			sx=(mincdpout+napmin+(bgc-1)*dcdp)*anapxdx-h;
+			for(itr=bgc;itr<=edc;itr++) 
+				{
+				sx=sx+dcdp*anapxdx;
+		 	 	gx=sx+offset;
+     			tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             	if(ttt>=tmax)   break;
+             	windtr(nt,data[itr],ttt,dt,&firstt,datal);
+         	 	ints8r(8, dt, firstt, datal,
+             	  	0.0, 0.0, 1, &ttt, &va);
+			 	if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
+			 	else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
+			 	else p=1.0;
+			 	ix++;
+			 	mig[ipx][it]+=va*qtmp*p;
+				}
+			}
+		 else
+			{
+			sx=(mincdpout+napmin+(bgc-1)*dcdp)*anapxdx-h;
+			for(itr=bgc;itr<=edc;itr++) 
+				{
+				sx=sx+dcdp*anapxdx;
+		 	 	gx=sx+offset;
+     			tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             	if(ttt>=tmax)   continue;
+             	windtr(nt,data[itr],ttt,dt,&firstt,datal);
+         	 	ints8r(8, dt, firstt, datal,
+             	  	0.0, 0.0, 1, &ttt, &va);
+			 	if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
+			 	else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
+			 	else p=1.0;
+			 	ix++;
+			 	mig[ipx][it]+=va*qtmp*p;
+				}
+			}
+/*-----------------------------------------------------*/
+		 /*sx=(mincdpout+napmin+(bgc-1)*dcdp)*anapxdx-h;
 		 for(itr=bgc;itr<=edc;itr++)
 			{
 			 if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
-			 else if(ix>nbj)	p=cos(1.570796*(ix-nbj)/nbj2);
+			 else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
 			 else p=1.0;
 			 ix++;
 			 sx=sx+dcdp*anapxdx;
@@ -349,11 +411,10 @@ for(itr=0; itr<ntr; itr++)
 			 tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
              if(ttt>=tmax)   continue;
              windtr(nt,data[itr],ttt,dt,&firstt,datal);
-			 /* sinc interpolate new data */
          	 ints8r(8, dt, firstt, datal,
              	  0.0, 0.0, 1, &ttt, &va);
 			 mig[ipx][it]+=va*qtmp*p;
-			}
+			}*/
 		}
 	}
 	memset ((void *) &tro, (int) '\0', sizeof (tro));

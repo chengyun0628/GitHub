@@ -76,6 +76,7 @@ main(int argc, char **argv)
  float angdx;					/* angle interval to image in 			*/
  float angdxx;					/* angdxx=1.0/angdx						*/
  float thit;   
+ float ipxb;
  int ximg;
  int *anapx;					/* coordinate of cdp for image space	*/ 
  int *offarr;
@@ -122,7 +123,7 @@ main(int argc, char **argv)
  int nf;                        /* number of frequencies (incl Nyq)     */
  int verbose;		            /* flag to get advisory messages	    */
  int KG=1;
- int nbj,nbj1,nbj2;
+ int nbjl,nbjr,nbj1,nbj2;
 /* file name */
  char str[100],*path;
  char *vfile="";
@@ -371,48 +372,122 @@ for(ix=0;ix<jx;ix++)
 		 	vt=v*T;
 		 	vtt=vt*vt;
 		 	aperture(it,ipx,mincdpx[ix],maxcdpx[ix],&bgc,&edc,anapxdx,vt,vtt,h,kjmin[ipx-firstcdp+napmin],kjmax[ipx-firstcdp+napmin]);
-			nbj=(edc-bgc+1)*0.2;
-		 	nbj1=(bgc-nbj)>mincdpx[ix]?nbj:(bgc-mincdpx[ix]);
-		 	nbj2=(edc+nbj)<maxcdpx[ix]?nbj:(maxcdpx[ix]-edc);
-			if((bgc-nbj1-mincdpx[ix])%dcdp[ix]!=0)	bgc=(bgc-nbj1-mincdpx[ix])/dcdp[ix]+1;
-			else	bgc=(bgc-nbj1-mincdpx[ix])/dcdp[ix];
-			edc=(edc+nbj2-mincdpx[ix])/dcdp[ix];
-			sx=(mincdpx[ix]+napmin+(bgc-1)*dcdp[ix])*anapxdx-h;
+			nbjl=(edc-bgc+1)*0.2;
+		 	nbj1=(bgc-nbjl)>mincdpx[ix]?nbjl:(bgc-mincdpx[ix]);
+		 	nbj2=(edc+nbjl)<maxcdpx[ix]?nbjl:(maxcdpx[ix]-edc);
+		 	if((bgc-nbj1-mincdpx[ix])%dcdp[ix]!=0)	bgc=(bgc-nbj1-mincdpx[ix])/dcdp[ix]+1;
+		 	else	bgc=(bgc-nbj1-mincdpx[ix])/dcdp[ix];
+		 	edc=(edc+nbj2-mincdpx[ix])/dcdp[ix];
 		 	nbj1=nbj1/dcdp[ix];
 		 	nbj2=nbj2/dcdp[ix];	
-			nbj=edc-bgc-nbj2;
+		 	nbjl=edc-bgc-nbj1;
+		 	nbjr=edc-bgc-nbj2;
+			ipxb=(ipx-mincdpx[ix])/dcdp[ix];
 			KG=0;
-		 	for(itr=offarr[ix]+bgc;itr<=offarr[ix]+edc;itr++)
+			/*------------------------------------------------------*/
+		 	if(ipxb>edc)		
 				{
-				if(KG<nbj1)	p=sin(1.570796*KG/nbj1);
-			 	else if(KG>nbj)	p=cos(1.570796*(KG-nbj)/nbj2);
-			 	else p=1.0;
-			 	KG++;
-			 	sx=sx+dcdp[ix]*anapxdx;
-		 	 	gx=sx+offset;
-				icdp=(sx+gx)/2/anapxdx-napmin;
-			 	tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
-             	if(ttt>=tmax)   continue;
-             	windtr(nt,data[itr],ttt,dt,&firstt,datal);
-			 /* sinc interpolate new data */
-         	 	ints8r(8, dt, firstt, datal,
-             	  	0.0, 0.0, 1, &ttt, &va);
-				ximg=(icdp-ipx)*anapxdx;
-			 	if (ximg==0)	aglerst[ipx][hmaxnthit][it]+=va;
-			 	else if (ximg<0)
+				sx=(mincdpout+napmin+(edc+1)*dcdp[ix])*anapxdx-h;
+		 		for(itr=offarr[ix]+edc;itr>=offarr[ix]+bgc;itr--) 
 					{
-				 	ximg=-ximg;
-			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
-				 	if(nthit==1000000)	break;
-				 	aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
-					}
-			 	else
-					{
-			 	 	calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
-				 	if(nthit==1000000)	break;
-				 	aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+					sx=sx-dcdp[ix]*anapxdx;
+		 	 		gx=sx+offset;
+     				tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             		if(ttt>=tmax)   break;
+             		windtr(nt,data[itr],ttt,dt,&firstt,datal);
+         	 		ints8r(8, dt, firstt, datal,
+             	  		0.0, 0.0, 1, &ttt, &va);
+			 		if(KG<nbj2)	p=sin(1.570796*KG/nbj2);
+			 		else if(KG>nbjl)	p=cos(1.570796*(KG-nbjl)/nbj1);
+			 		else p=1.0;
+			 		KG++;
+			 		icdp=(sx+gx)/2/anapxdx-napmin;
+					ximg=(icdp-ipx)*anapxdx;
+			 		if (ximg==0)	aglerst[ipx][hmaxnthit][it]+=va;
+			 		else if (ximg<0)
+						{
+				 		ximg=-ximg;
+			 	 		calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 		if(nthit==1000000)	break;
+				 		aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+						}
+			 		else
+						{
+			 	 		calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 		if(nthit==1000000)	break;
+				 		aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+						}
 					}
 				}
+		 	else if(ipxb<bgc)
+				{
+				sx=(mincdpx[ix]+napmin+(bgc-1)*dcdp[ix])*anapxdx-h;
+				for(itr=offarr[ix]+bgc;itr<=offarr[ix]+edc;itr++) 
+					{
+					sx=sx+dcdp[ix]*anapxdx;
+		 	 		gx=sx+offset;
+     				tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             		if(ttt>=tmax)   break;
+             		windtr(nt,data[itr],ttt,dt,&firstt,datal);
+         	 		ints8r(8, dt, firstt, datal,
+             	  		0.0, 0.0, 1, &ttt, &va);
+			 		if(KG<nbj1)	p=sin(1.570796*KG/nbj1);
+			 		else if(KG>nbjr)	p=cos(1.570796*(KG-nbjr)/nbj2);
+			 		else p=1.0;
+			 		KG++;
+			 		icdp=(sx+gx)/2/anapxdx-napmin;
+					ximg=(icdp-ipx)*anapxdx;
+			 		if (ximg==0)	aglerst[ipx][hmaxnthit][it]+=va;
+			 		else if (ximg<0)
+						{
+				 		ximg=-ximg;
+			 	 		calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 		if(nthit==1000000)	break;
+				 		aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+						}
+			 		else
+						{
+			 	 		calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 		if(nthit==1000000)	break;
+				 		aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+						}
+					}
+				}
+		 	else
+				{
+				sx=(mincdpx[ix]+napmin+(bgc-1)*dcdp[ix])*anapxdx-h;
+				for(itr=offarr[ix]+bgc;itr<=offarr[ix]+edc;itr++) 
+					{
+					sx=sx+dcdp[ix]*anapxdx;
+		 	 		gx=sx+offset;
+     				tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+             		if(ttt>=tmax)   continue;
+             		windtr(nt,data[itr],ttt,dt,&firstt,datal);
+         	 		ints8r(8, dt, firstt, datal,
+             	  		0.0, 0.0, 1, &ttt, &va);
+			 		if(KG<nbj1)	p=sin(1.570796*KG/nbj1);
+			 		else if(KG>nbjr)	p=cos(1.570796*(KG-nbjr)/nbj2);
+			 		else p=1.0;
+			 		KG++;
+			 		icdp=(sx+gx)/2/anapxdx-napmin;
+					ximg=(icdp-ipx)*anapxdx;
+			 		if (ximg==0)	aglerst[ipx][hmaxnthit][it]+=va;
+			 		else if (ximg<0)
+						{
+				 		ximg=-ximg;
+			 	 		calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 		if(nthit==1000000)	break;
+				 		aglerst[ipx][hmaxnthit+nthit][it]+=va*qtmp*p;
+						}
+			 		else
+						{
+			 	 		calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
+				 		if(nthit==1000000)	break;
+				 		aglerst[ipx][hmaxnthit-nthit][it]+=va*qtmp*p;
+						}
+					}
+				}
+			/*-----------------------------------------------------*/
 			}
 		}
 	}
