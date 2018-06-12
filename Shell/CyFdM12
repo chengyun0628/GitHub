@@ -1,0 +1,46 @@
+#! /bin/sh
+# cyfdmod12 --- example script for cyfdmod12
+# finite-difference modeling
+WIDTH=450
+HEIGHT=450
+WIDTHOFF1=10
+WIDTHOFF2=500
+HEIGHTOFF1=50
+HEIGHTOFF2=530
+
+nx=500 dx=20 label2="Distance (km)"
+nz=300 dz=20 label1="Depth (km)"
+tmax=4.
+
+shot_num=1
+shot_interval=2
+shot_startx=80
+shot_startz=0
+receiver_numx=100
+receiver_numz=100
+receiver_interval=1
+receiver_off=1
+receiver_startx=30
+receiver_startz=0
+sstrength=10
+mono=0
+fmax=20 fpeak=10 
+pml_thick=100
+pml_width=100
+atten=50
+movie=0
+mt=2
+hs1=0 vs2=250 
+hsfile="hseis12.su" vsfile="vseis12.su" ssfile="sseis12.su" 
+verbose=0
+
+./cyfdmod12 <vintz.bin nx=$nx dx=$dx nz=$nz dz=$dz tmax=$tmax  \
+	shot_num=$shot_num shot_interval=$shot_interval shot_startx=$shot_startx shot_startz=$shot_startz \
+	receiver_numx=$receiver_numx receiver_numz=$receiver_numz receiver_interval=$receiver_interval	\
+	receiver_off=$receiver_off receiver_startx=$receiver_startx receiver_startz=$receiver_startz 	\
+	sstrength=$sstrength mono=$mono		\
+	pml_thick=$pml_thick pml_width=$pml_width atten=$atten	movie=$movie mt=$mt	\
+	hs1=$hs1 vs2=$vs2 hsfile=$hsfile vsfile=$vsfile ssfile=$ssfile	\
+	verbose=$verbose >tsizes12
+#suxmovie<tsizes12  clip=1.0 title="Acoustic Finite-Differencing" windowtitle="Movie" label1="Depth(km)" label2="Distance(km)" n1=300 d1=20 f1=0 n2=500 d2=20 f2=0 cmap=gray loop=2 interp=0 &
+exit 0
