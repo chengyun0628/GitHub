@@ -516,9 +516,9 @@ main(int argc, char **argv)
 			}
 
 		}
-	fclose(hseisfp);	
-	fclose(vseisfp);
-	fclose(sseisfp);
+	if (*hsfile!='\0') fclose(hseisfp);	
+	if (*vsfile!='\0') fclose(vseisfp);
+	if (*ssfile!='\0') fclose(sseisfp);
 
 	/* free space before returning */
 	free1int(source_x_cord);

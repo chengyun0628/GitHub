@@ -8,19 +8,19 @@ WIDTHOFF2=500
 HEIGHTOFF1=50
 HEIGHTOFF2=530
 
-nx=500 dx=20 label2="Distance (km)"
-nz=300 dz=20 label1="Depth (km)"
-tmax=4.
+nx=601 dx=6 label2="Distance (km)"
+nz=301 dz=6 label1="Depth (km)"
+tmax=2.
 
 shot_num=1
 shot_interval=2
-shot_startx=80
+shot_startx=300
 shot_startz=0
-receiver_numx=100
-receiver_numz=100
-receiver_interval=1
+receiver_numx=200
+receiver_numz=200
+receiver_interval=2
 receiver_off=1
-receiver_startx=30
+receiver_startx=100
 receiver_startz=0
 sstrength=10
 mono=0
@@ -31,10 +31,10 @@ atten=50
 movie=0
 mt=2
 hs1=0 vs2=250 
-hsfile="hseis12.su" vsfile="vseis12.su" ssfile="sseis12.su" 
-verbose=0
+hsfile="hseis12.su" vsfile="" ssfile="" 
+verbose=1
 
-./cyfdmod12 <vintz.bin nx=$nx dx=$dx nz=$nz dz=$dz tmax=$tmax  \
+./cyfdmod12 <modelA nx=$nx dx=$dx nz=$nz dz=$dz tmax=$tmax  \
 	shot_num=$shot_num shot_interval=$shot_interval shot_startx=$shot_startx shot_startz=$shot_startz \
 	receiver_numx=$receiver_numx receiver_numz=$receiver_numz receiver_interval=$receiver_interval	\
 	receiver_off=$receiver_off receiver_startx=$receiver_startx receiver_startz=$receiver_startz 	\
