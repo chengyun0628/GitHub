@@ -106,6 +106,7 @@ main(int argc, char **argv)
  int firstcdp=0;	            /* first cdp in velocity file	    	*/
  int lastcdp=0;	                /* last cdp in velocity file	    	*/
  int ncdp;	                	/* number of cdps in the velocity file	*/ 
+ int nkj;
  int nt;                		/* number of points on input trace      */
  int ntr;						/* number of trace input				*/
  int npx;						/* number of trace of imaging sapce		*/
@@ -198,6 +199,7 @@ main(int argc, char **argv)
  maxcdpout=maxcdp-napmin;
  nstartmt=0.001*startmt/dt;
  nendmt = 0.001*endmt/dt;
+ nkj=maxcdp-mincdp+1;
  offarr=ealloc1int(noff);
  offx=ealloc1int(noff);
  dcdp=ealloc1int(noff);
@@ -272,8 +274,8 @@ main(int argc, char **argv)
  filter=ealloc1float(nf);
  data=ealloc2float(nt,ntr);
  vel=ealloc2float(nt,ncdp);
- kjmin=ealloc2float(nt,ncdp);
- kjmax=ealloc2float(nt,ncdp);
+ kjmin=ealloc2float(nt,nkj);
+ kjmax=ealloc2float(nt,nkj);
  mig=ealloc2float(nt,npx);
 
 /* Zero all arrays */
@@ -293,10 +295,10 @@ main(int argc, char **argv)
  efread(vel[0],FSIZE,nt*ncdp,vfp);
  efclose(vfp);
  minbj=efopen(kjfile1,"r");
- efread(kjmin[0],FSIZE,nt*ncdp,minbj);
+ efread(kjmin[0],FSIZE,nt*nkj,minbj);
  efclose(minbj);
  maxbj=efopen(kjfile2,"r");
- efread(kjmax[0],FSIZE,nt*ncdp,maxbj);
+ efread(kjmax[0],FSIZE,nt*nkj,maxbj);
  efclose(maxbj);
 
 /* Define half derivative*/
@@ -355,7 +357,7 @@ for(itr=0; itr<ntr; itr++)
 		 	v=vel[ipx-firstcdp+napmin][it];
 		 	vt=v*T;
 		 	vtt=vt*vt;
-		 	aperture(it,ipx,mincdpx[ix],maxcdpx[ix],&bgc,&edc,anapxdx,vt,vtt,h,kjmin[ipx-firstcdp+napmin],kjmax[ipx-firstcdp+napmin]);
+		 	aperture(it,ipx,mincdpx[ix],maxcdpx[ix],&bgc,&edc,anapxdx,vt,vtt,h,kjmin[ipx-mincdp+napmin],kjmax[ipx-mincdp+napmin]);
 			nbjl=(edc-bgc+1)*0.2;
 		 	nbj1=(bgc-nbjl)>mincdpx[ix]?nbjl:(bgc-mincdpx[ix]);
 		 	nbj2=(edc+nbjl)<maxcdpx[ix]?nbjl:(maxcdpx[ix]-edc);
