@@ -24,7 +24,7 @@ main(int argc, char **argv)
 {
 int ix,nx,iz,nz;
 float flv;
-float **vel;
+float **vel=NULL;
 FILE *vfp;
 
 /* hook up getpar to handle the parameters */
@@ -34,14 +34,13 @@ requestdoc(0);
 if (!getparint("nx",&nx)) 	err("must specify nx!\n");
 if (!getparint("nz",&nz)) 	err("must specify nz!\n");
 if (!getparfloat("flv",&flv)) err("must specify flv!\n");
-vel=alloc2float(nz,nx);
+vel=ealloc2float(nz,nx);
 
 for(ix=0;ix<nx;ix++)
 	for(iz=0;iz<nz;iz++)
 		vel[ix][iz]=flv;
 vfp=fopen("flvmdl","wb");
-fwrite(vel,sizeof(float),nz*nx,vfp);
-
+fwrite(vel[0],sizeof(float),nx*nz,vfp);
 fclose(vfp);
 free2float(vel);
 return (0);
