@@ -76,7 +76,6 @@ main(int argc, char **argv)
  float angdx;					/* angle interval to image in 			*/
  float angdxx;					/* angdxx=1.0/angdx						*/
  float thit;   
- float ipxb;
  int ximg;
  int *anapx;					/* coordinate of cdp for image space	*/ 
  int *offarr;
@@ -106,7 +105,7 @@ main(int argc, char **argv)
  int nthit;						/* angle trace number calculated		*/
  int iagle;
  int icdp;						/* count number                         */
- int itr,ix,ipx,it,jx; 			/* count number                         */
+ int itr,ix,ipx,ipb,it,jx; 		/* count number                         */
  int nf1,nf2,nf3,nf4;           /* nf1=(int)(f1/df)                     */
  int bgc,edc;					/* begin and end of imaging	trace		*/		
  int mincdp,maxcdp;				/* mincdp and maxcdp of data input		*/
@@ -382,12 +381,12 @@ for(ix=0;ix<jx;ix++)
 		 	nbj2=nbj2/dcdp[ix];	
 		 	nbjl=edc-bgc-nbj1;
 		 	nbjr=edc-bgc-nbj2;
-			ipxb=(ipx-mincdpx[ix])/dcdp[ix];
+			ipb=(ipx-mincdpx[ix])/dcdp[ix];
 			KG=0;
 			/*------------------------------------------------------*/
-		 	if(ipxb>edc)		
+		 	if(ipb>edc)		
 				{
-				sx=(mincdpout+napmin+(edc+1)*dcdp[ix])*anapxdx-h;
+				sx=(mincdpx[ix]+napmin+(edc+1)*dcdp[ix])*anapxdx-h;
 		 		for(itr=offarr[ix]+edc;itr>=offarr[ix]+bgc;itr--) 
 					{
 					sx=sx-dcdp[ix]*anapxdx;
@@ -419,7 +418,7 @@ for(ix=0;ix<jx;ix++)
 						}
 					}
 				}
-		 	else if(ipxb<bgc)
+		 	else if(ipb<bgc)
 				{
 				sx=(mincdpx[ix]+napmin+(bgc-1)*dcdp[ix])*anapxdx-h;
 				for(itr=offarr[ix]+bgc;itr<=offarr[ix]+edc;itr++) 
@@ -564,22 +563,27 @@ void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,int anapxd
  float x;
  float ang;
  float tanp;
- ang=angx1[it]*PI*0.005556;
+ ang=angx1[it]*PI*0.005556;	
  if(ang<-0.00001 || ang>0.00001)
 	{
  	tanp=tan(ang)*tan(ang);
  	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*edc=MIN(maxcdp,icdp - ceil(x/anapxdx));
+ 	*edc=icdp - ceil(x/anapxdx);
 	}
  else	*edc=icdp;
+
  ang=angx2[it]*PI*0.005556;
  if(ang<-0.00001 || ang>0.00001)
 	{
  	tanp=tan(ang)*tan(ang);
  	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*bgc=MAX(mincdp,icdp - ceil(x/anapxdx));
+ 	*bgc=icdp - ceil(x/anapxdx);
 	}
  else	*bgc=icdp;
+
+ if (*bgc>maxcdp || *edc<mincdp)	*bgc=999999;
+ if (mincdp>*bgc)	*bgc=mincdp;
+ if (*bgc!=999999 && *edc>maxcdp)	*edc=maxcdp;
 }
 
 void tanda(int ipx,int *anapx,float sx,float gx,float v,float vtt,float *ttt,float *qtmp)
