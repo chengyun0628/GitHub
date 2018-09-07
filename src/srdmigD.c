@@ -39,7 +39,7 @@ static time_t t1,t2;
 void get_sx_gx_offset(int *sx, int *gx,int *offset);
 void windtr(int nt,float *rtx,float ttt,float dt,float *firstt,float *datal);
 void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp);
-void tanda(int ipx,int *anapx,int sx,int gx,float dt,float v,float T,float *ttt,float *qtmp);
+void tanda(int ipx,int *anapx,int sx,int gx,float v,float T,float *ttt,float *qtmp);
 void aperture(int it,int icdp,int mincdpout,int maxcdpout,int *bgc,int *edc,int anapxdx,float vt,float vtt,float h,float *angx1,float *angx2 );
 void hammingFilter(int nf1,int nf2,int nf3,int nf4,int nf, float *filter);
 #define LOOKFAC 2145
@@ -315,6 +315,8 @@ for(itr=0; itr<ntr; ++itr)
 	/* determine index of first sample to survive mute */
  	 if(smute!=0)
 		{
+		tmin=0;
+		itmute=nstartmt;
 	 	T2=(nstartmt-2)*hdt;
 	 	for(it=nstartmt;it<=nendmt;it++)
 			{
@@ -331,7 +333,7 @@ for(itr=0; itr<ntr; ++itr)
 		 	T1-=hdt;
 		 	v1=vel[icdp-firstcdp+napmin][it];
  		 	ttt=2*hypotf(T1,h/v1);
-		 	if(ttt<tmin)
+		 	if(ttt<=tmin)
 				{
 				itmute=it;
 				break;
@@ -345,11 +347,11 @@ for(itr=0; itr<ntr; ++itr)
 		{
 		 T1+=hdt;
 		 v1=vel[icdp-firstcdp+napmin][it];
+		 ttt=2*hypotf(T1,h/v1);
+		 if(ttt>=tmax)   break;
 		 vt=v1*T1;
 		 vtt=vt*vt;
 		 aperture(it,icdp,mincdpout,maxcdpout,&bgc,&edc,anapxdx,vt,vtt,h,kjmin[icdp-mincdp+napmin],kjmax[icdp-mincdp+napmin]);
-		 tanda(icdp,anapx,sx,gx,dt,v1,T1,&ttt,&qtmp);
-		 if(ttt>=tmax)   break;
 		 nbjl=(edc-bgc+1)*0.2;
 		 nbj1=(bgc-nbjl)>mincdpout?nbjl:(bgc-mincdpout);
 		 nbj2=(edc+nbjl)<maxcdpout?nbjl:(maxcdpout-edc);
@@ -363,7 +365,7 @@ for(itr=0; itr<ntr; ++itr)
 		 	for(ipx=edc;ipx>=bgc;ipx--) 
 				{
 				v1=vel[ipx-firstcdp+napmin][it];
-     			tanda(ipx,anapx,sx,gx,dt,v1,T1,&ttt,&qtmp);
+     			tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              	if(ttt>=tmax)   break;
              	windtr(nt,rtx,ttt,dt,&firstt,datal);
          	 	ints8r(8, dt, firstt, datal,
@@ -378,7 +380,7 @@ for(itr=0; itr<ntr; ++itr)
 			for(ipx=bgc;ipx<=edc;ipx++) 
 				{
 				v1=vel[ipx-firstcdp+napmin][it];
-     			tanda(ipx,anapx,sx,gx,dt,v1,T1,&ttt,&qtmp);
+     			tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              	if(ttt>=tmax)   break;
              	windtr(nt,rtx,ttt,dt,&firstt,datal);
          	 	ints8r(8, dt, firstt, datal,
@@ -393,7 +395,7 @@ for(itr=0; itr<ntr; ++itr)
 			for(ipx=bgc;ipx<=edc;ipx++) 
 				{
 				v1=vel[ipx-firstcdp+napmin][it];
-     			tanda(ipx,anapx,sx,gx,dt,v1,T1,&ttt,&qtmp);
+     			tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              	if(ttt>=tmax)   continue;
              	windtr(nt,rtx,ttt,dt,&firstt,datal);
          	 	ints8r(8, dt, firstt, datal,
@@ -498,7 +500,7 @@ void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,fl
  *ttt=*ttt+*ttt;
 }
 
-void tanda(int ipx,int *anapx,int sx,int gx,float dt,float v,float T,float *ttt,float *qtmp)
+void tanda(int ipx,int *anapx,int sx,int gx,float v,float T,float *ttt,float *qtmp)
 {
  float xxs,xxg;
  float ts,tg;

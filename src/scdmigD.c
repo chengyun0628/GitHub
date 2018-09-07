@@ -37,7 +37,8 @@ static time_t t1,t2;
 
 /* Prototype of function used internally */
 void windtr(int nt,float *rtw,float ttt,float dt,float *firstt,float *datal);
-void tanda(int ipx,int *anapx,float sx,float gx,float v,float vtt,float *ttt,float *qtmp);
+void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp);
+void tanda(int ipx,int *anapx,int sx,int gx,float v1,float T1,float *ttt,float *qtmp);
 void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,int anapxdx,float vt,float vtt,float h,float *angx1,float *angx2 );
 void hammingFilter(int nf1,int nf2,int nf3,int nf4,int nf, float *filter);
 #define LOOKFAC 2
@@ -63,12 +64,19 @@ main(int argc, char **argv)
  float va;    					/* ununiform sampled value				*/ 
  float firstt;					/* the first sample in datal[8]			*/
  float dt,hdt;					/* sample interval & half of that		*/
- float T;						/* vertical time depth 					*/
+ float T1,T2;					/* vertical time depth 					*/
  float p;						/* Boundary attenuation factor of amp	*/
  float df,dw;					/* freqency sample spacing				*/
- float tmax;					/* the max trace length					*/
- float v,vt,vtt;				/* velocity,vt=v*T,vtt=vt*vt			*/
+ float tmax=0;					/* the max trace length					*/
+ float tmin=0;					/* the min time survive from mute		*/
+ float v1;						/* velocity1							*/
+ float v2;						/* velocity2							*/
+ float vt;						/* vt=v*T								*/
+ float vtt;						/* vtt=vt*vt							*/
  float f1,f2,f3,f4;				/* array of filter frequencies          */
+ float h;						/*  half of offset  					*/
+ float smute=0;					/* strech mute factor,smute=0 ->no mute */
+ float osmute;					/* osmute=1/smute					 	*/
  
  int *offx;  					/* store each co gather's offset		*/
  int *offarr;					/* store ~'s first trace num			*/ 
@@ -87,8 +95,9 @@ main(int argc, char **argv)
  int oldcdp;					/* tmp value for cdp counter			*/
  int oldcdpt;					/* tmp value for cdp counter			*/
  int oldoffset;					/* tmp value for co group devide		*/
- int offset,h;					/* offset and half of that 				*/
+ int offset;					/* offset and half of that 				*/
  int startmt,endmt;				/* the start & end time for migration	*/
+ int itmute;					/* the start migration time for mute	*/
  int nf1,nf2,nf3,nf4;           /* nf1=(int)(f1/df)                     */
  int bgc,edc;					/* begin & end of imaging trace			*/		
  int mincdp,maxcdp;				/* min & max cdp of data input			*/
@@ -102,7 +111,7 @@ main(int argc, char **argv)
  int nfft;                      /* number of points for fft trace       */
  int nf;                        /* number of frequencies (incl Nyq)     */
  int verbose;		            /* flag to get advisory messages	    */
- int icdp,itr,ipx,it,ix,jx; 	/* count number                         */
+ int icdp,itr,ipx,ipb,it,ix,jx; /* count number                         */
  int KG=1;						/* counter switch						*/
  int nbjl,nbjr,nbj1,nbj2;		/* acture range of migration			*/
 
@@ -176,8 +185,10 @@ main(int argc, char **argv)
  fscanf(fp,"anapxmin=%d\n",&anapxmin);
  fscanf(fp,"anapxmax=%d\n",&anapxmax);
  fscanf(fp,"anapxdx=%d\n",&anapxdx);
+ fscanf(fp,"smute=%f\n",&smute);
  efclose(fp);
  if (fmod(tritvl,anapxdx)!=0)	err("Check anapxdx value in parfile,cause that tritvl must be an integer number of anapxdx");
+ if(smute!=0)	osmute=1/smute;
  time(&t1);
  
 /*caculate image spacing*/
@@ -191,7 +202,7 @@ main(int argc, char **argv)
  mincdpout=mincdp-napmin;
  maxcdpout=maxcdp-napmin;
 
- startmt=0.001*startmt/dt;
+ startmt=itmute=0.001*startmt/dt;
  endmt = 0.001*endmt/dt;
 
  noff=(maxoff-minoff)/tritvl+2;
@@ -356,12 +367,43 @@ for(itr=0; itr<ntr; itr++)
 	 h=offset*0.5;
 	 for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
 		{
-	 	T=startmt*hdt;
-	 	for(it=startmt;it<endmt;it++)
+		/* determine index of first sample to survive mute */
+ 	 	if(smute!=0)
 			{
-		 	T+=hdt;
-		 	v=vel[ipx-firstcdp+napmin][it];
-		 	vt=v*T;
+			tmin=0;
+			itmute=startmt;
+	 		T2=(startmt-2)*hdt;
+	 		for(it=startmt;it<=endmt;it++)
+				{
+		 		T2+=hdt;
+		 		v2=vel[ipx-firstcdp+napmin][it-1];
+		 		T1=T2+hdt;
+		 		v1=vel[ipx-firstcdp+napmin][it];
+		 		mutefct(h,hdt,v1,T1,v2,T2,&ttt,&qtmp);
+		 		if	(qtmp<osmute)	tmin=ttt;
+				}
+	 		T1=(endmt+1)*hdt;
+	 		for(it=endmt;it>=startmt;it--)
+				{
+		 		T1-=hdt;
+		 		v1=vel[ipx-firstcdp+napmin][it];
+ 		 		ttt=2*hypotf(T1,h/v1);
+		 		if(ttt<=tmin)
+					{
+					itmute=it;
+					break;
+					}	
+				}
+			}
+		/* loop in the image space*/
+	 	T1=(itmute-1)*hdt;
+	 	for(it=itmute;it<=endmt;it++)
+			{
+			v1=vel[ipx-firstcdp+napmin][it];
+		 	T1+=hdt;
+			ttt=2*hypotf(T1,h/v1);
+		 	if(ttt>=tmax)   break;
+		 	vt=v1*T1;
 		 	vtt=vt*vt;
 		 	aperture(it,ipx,mincdpx[ix],maxcdpx[ix],&bgc,&edc,anapxdx,vt,vtt,h,kjmin[ipx-mincdpout],kjmax[ipx-mincdpout]);
 			if (bgc==999999)	continue;
@@ -375,15 +417,16 @@ for(itr=0; itr<ntr; itr++)
 		 	nbj2=nbj2/dcdp[ix];	
 		 	nbjl=edc-bgc-nbj1;
 		 	nbjr=edc-bgc-nbj2;
+			ipb=(ipx-mincdpx[ix])/dcdp[ix];
 			KG=0;
-		 	if(ipx>=maxcdpx[ix])		
+		 	if(ipb>edc)		
 				{
 				sx=(mincdpx[ix]+napmin+(edc+1)*dcdp[ix])*anapxdx-h;
 		 		for(itr=offarr[ix]+edc;itr>=offarr[ix]+bgc;itr--) 
 					{
 					sx=sx-dcdp[ix]*anapxdx;
 		 	 		gx=sx+offset;
-     				tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+     				tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              		if(ttt>=tmax)   break;
              		windtr(nt,data[itr],ttt,dt,&firstt,datal);
          	 		ints8r(8, dt, firstt, datal,
@@ -395,14 +438,14 @@ for(itr=0; itr<ntr; itr++)
 			 		mig[ipx][it]+=va*qtmp*p;
 					}
 				}
-		 	else if(ipx<=mincdpx[ix])
+		 	else if(ipb<bgc)
 				{
 				sx=(mincdpx[ix]+napmin+(bgc-1)*dcdp[ix])*anapxdx-h;
 				for(itr=offarr[ix]+bgc;itr<=offarr[ix]+edc;itr++) 
 					{
 					sx=sx+dcdp[ix]*anapxdx;
 		 	 		gx=sx+offset;
-     				tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+     				tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              		if(ttt>=tmax)   break;
              		windtr(nt,data[itr],ttt,dt,&firstt,datal);
          	 		ints8r(8, dt, firstt, datal,
@@ -421,7 +464,7 @@ for(itr=0; itr<ntr; itr++)
 					{
 					sx=sx+dcdp[ix]*anapxdx;
 		 	 		gx=sx+offset;
-     				tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+     				tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              		if(ttt>=tmax)   continue;
              		windtr(nt,data[itr],ttt,dt,&firstt,datal);
          	 		ints8r(8, dt, firstt, datal,
@@ -526,14 +569,23 @@ void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,int anapxd
  if (*bgc!=999999 && *edc>maxcdp)	*edc=maxcdp;
 }
 
-void tanda(int ipx,int *anapx,float sx,float gx,float v,float vtt,float *ttt,float *qtmp)
+void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp)
+{
+ float ttmp;
+ ttmp= hypotf(T2,h/v2);
+ *ttt= hypotf(T1,h/v1);
+ *qtmp=(*ttt-ttmp)/hdt;
+ *ttt=*ttt+*ttt;
+}
+
+void tanda(int ipx,int *anapx,int sx,int gx,float v1,float T1,float *ttt,float *qtmp)
 {
  float xxs,xxg;
  float ts,tg;
  xxs=anapx[ipx]-sx;
  xxg=anapx[ipx]-gx;
- ts=sqrt(xxs*xxs+vtt)/v;
- tg=sqrt(xxg*xxg+vtt)/v;
+ ts = hypotf(T1,xxs/v1);
+ tg = hypotf(T1,xxg/v1);
  *ttt=ts+tg;
  *qtmp=pow((ts/tg),1.5);
 }

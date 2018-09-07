@@ -1,0 +1,1 @@
+1. scdmigA.c has a bug that it can't handle the situation when there is only one trace in an offset gather. So when one data is going to be processed, Please reject the special offset gather by using suwind commod.

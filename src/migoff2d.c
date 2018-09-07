@@ -36,15 +36,16 @@ NULL};
 static time_t t1,t2;
 
 /* Prototype of function used internally */
-void get_sx_gx_offset(int *sx, int *gx,int *offset);
+void get_sx_gx_offset(float *sx, float *gx,float *offset);
 void windtr(int nt,float *rtx,float ttt,float dt,float *firstt,float *datal);
 void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp);
-void tanda(int ipx,int *anapx,int sx,int gx,float v,float T,float *ttt,float *qtmp);
-void aperture(int it,int icdp,int mincdpout,int maxcdpout,int *bgc,int *edc,int anapxdx,float vt,float vtt,float h,float *angx1,float *angx2 );
+void tanda(int ipx,float *anapx,float sx,float gx,float v1,float T1,float *ttt,float *qtmp);
+void aperture(int it,int icdp,int mincdpout,int maxcdpout,int *bgc,int *edc,float anapxdx,float vt,float vtt,float h,float *angxb );
+void angleintsmt(int nt,float dt,float tm1,float tm2,float tm3,float tm4,float ang1,float ang2,float ang3,float ang4,float *angx);
 void hammingFilter(int nf1,int nf2,int nf3,int nf4,int nf, float *filter);
-#define LOOKFAC 2145
+#define LOOKFAC 2
 #define PFA_MAX 720720
-segy tri;                        /* trace of input  						*/
+segy tri;                        /* trace of input  					*/
 segy tro;						/* trace of output 						*/
 int
 main(int argc, char **argv)
@@ -53,18 +54,28 @@ main(int argc, char **argv)
  register complex *ct;          /* complex transformed trace            */
  register complex *hd;			/* half derivative						*/
  float *filter;              	/* filter array                         */
+ float *angx;					/* array of given aperture angle 		*/
+ float *angxb;					/* array of given aperture angle 		*/
+ float *anapx;					/* coordinate of cdp for image space	*/
  float datal[8];				/* small cut of ununiform sample trace	*/ 
  float **data;					/* temp_array of 2D real trace			*/
  float **vel=NULL;              /* array for storing velocity           */
- float **kjmin=NULL;            /* array for storing the min aperture   */
- float **kjmax=NULL;            /* array for storing the max aperture   */
  float **mig=NULL;				/* array for storing migrated result	*/
  float ttt;						/* Travel time							*/
  float qtmp;					/* Amptitude of migration				*/	
  float va;    					/* ununiform sampled value				*/ 
  float firstt;					/* the first sample in datal[8]			*/
+ float f1,f2,f3,f4;				/* array of filter frequencies          */   
+ float sx,gx;					/* coordinate of shot and geophone  	*/
+ float oldoffset;				/* offset for group devided	and output	*/
+ float offset,h;				/* offset and half of that				*/
+ float cdp;						/* coordinate of cdp					*/
+ float tritvl;					/* trace interval						*/
+ float ximg;					/* distance between cdp and image point	*/
  float dt;						/* sample interval						*/
- float hdt;
+ float hdt;						/* half of sample interval				*/
+ float angtmp;					/* tmp variable for angle cacluation	*/
+ float tanp;             		/* tanp=pow(tan(ang),2); 				*/
  float T1,T2;					/* vertical time depth 					*/
  float p;						/* Boundary attenuation factor of amp	*/
  float df,dw;					/* freqency sample spacing				*/
@@ -74,53 +85,48 @@ main(int argc, char **argv)
  float v2;						/* velocity2							*/
  float vt;						/* vt=v*T								*/
  float vtt;						/* vtt=vt*vt							*/
- float cdp;						/* coordinate of cdp					*/
- float f1,f2,f3,f4;				/* array of filter frequencies          */
+ float ang1,ang2,ang3,ang4;		/* given migration aperture angle		*/
+ float anapxmin;				/* min coordinate of imaging point		*/ 
+ float anapxmax;				/* max coordinate of imaging point		*/
+ float anapxdx;					/* spacing between imaging point		*/
+ float tm1,tm2,tm3,tm4;			/* time corespond to apreture angle		*/
  float smute=0;					/* strech mute factor,smute=0 ->no mute */
- float osmute;					/* osmute=1/smute					 	*/   
- int *anapx;					/* coordinate of cdp for image space	*/
- int sx,gx;						/* coordinate of shot and geophone  	*/
- int oldoffset;					/* offset for group devided	and output	*/
- int offset,h;					/* offset and half of that				*/
- int tritvl;					/* trace interval						*/
- int anapxmin;					/* min coordinate of imaging point		*/ 
- int anapxmax;					/* max coordinate of imaging point		*/
- int anapxdx;					/* spacing between imaging point		*/
- int startmt;					/* the start time for migration			*/
+ float osmute;					/* osmute=1/smute					 	*/
+ float startmt;					/* the start time for migration			*/
+ float endmt;					/* the end time for migration			*/
  int nstartmt;					/* nstartmt=startmt/dT					*/
- int endmt;						/* the end time for migration			*/
  int nendmt;					/* nendmt=endmt/D=dT					*/
  int itr,ix,ipx,it; 			/* count number                         */
  int itmute;					/* the start migration time for mute	*/
  int icdp;						/* count number                         */
  int nf1,nf2,nf3,nf4;           /* nf1=(int)(f1/df)                     */
  int napmin;					/* napmin=(int)(anapxmin/anapxdx)		*/
+ int oldcdp=0;	            	/* for temporary storage		        */
+ int olddeltacdp=1;				/* for temporary storage                */
+ int deltacdp;
  int bgc,edc;					/* begin and end of imaging	trace		*/		
  int mincdp,maxcdp;				/* mincdp and maxcdp of data input		*/
  int mincdpout;					/* the min cdp to output(image space)	*/
  int maxcdpout;					/* the min cdp to output(image space)	*/
- int mincdpo;					/* storing the mincdp for temporary to write header*/
+ int mincdpo;					/* storing the mincdp for temporary to write header	*/
  int firstcdp=0;	            /* first cdp in velocity file	    	*/
  int lastcdp=0;	                /* last cdp in velocity file	    	*/
  int ncdp;	                	/* number of cdps in the velocity file	*/ 
- int nkj;
+ int dcdp=0;	                /* number of cdps between consecutive traces 		*/
  int nt;                		/* number of points on input trace      */
  int ntr;						/* number of trace input				*/
  int npx;						/* number of trace of imaging sapce		*/
  int nfft;                      /* number of points for fft trace       */
  int nf;                        /* number of frequencies (incl Nyq)     */
  int verbose;		            /* flag to get advisory messages	    */
- int nbjl,nbjr,nbj1,nbj2;
+
 /* file name */
  char str[100],*path;
  char *vfile="";
- char *kjfile1="";
- char *kjfile2="";
  char *parfile="";
  FILE *fp;
+ FILE *fp1;
  FILE *vfp=NULL;
- FILE *minbj=NULL;
- FILE *maxbj=NULL;
  FILE *tracefp=NULL;	        /* temp file to hold traces             */
  FILE *hfp=NULL;		        /* temp file to hold trace headers      */
  cwp_Bool seismic;	            /* is this seismic data?		        */
@@ -156,8 +162,6 @@ main(int argc, char **argv)
 /* Get parameter*/
  if(!getparstring("path",&path))	err("path must be specified !");
  if(!getparstring("vfile",&vfile))	err("velocity file must be specified !");
- if(!getparstring("kjfile1",&kjfile1))	err("aperture file1 must be specified !");
- if(!getparstring("kjfile2",&kjfile2))	err("aperture file2 must be specified !");
  if(!getparstring("parfile",&parfile))	err("parameter file must be specified ! ");
  sprintf(str,"%s/par/%s",path,parfile);
  warn("str=%s",str);
@@ -166,26 +170,39 @@ main(int argc, char **argv)
  fscanf(fp,"maxcdp=%d\n",&maxcdp);
  fscanf(fp,"firstcdp=%d\n",&firstcdp);
  fscanf(fp,"lastcdp=%d\n",&lastcdp);
- fscanf(fp,"startmt=%d\n",&startmt);
- fscanf(fp,"endmt=%d\n",&endmt);
- fscanf(fp,"tritvl=%d\n",&tritvl);
+ fscanf(fp,"startmt=%f\n",&startmt);
+ fscanf(fp,"endmt=%f\n",&endmt);
+ fscanf(fp,"tm1=%f\n",&tm1);
+ fscanf(fp,"tm2=%f\n",&tm2);
+ fscanf(fp,"tm3=%f\n",&tm3);
+ fscanf(fp,"tm4=%f\n",&tm4);
+ fscanf(fp,"ang1=%f\n",&ang1);
+ fscanf(fp,"ang2=%f\n",&ang2);
+ fscanf(fp,"ang3=%f\n",&ang3);
+ fscanf(fp,"ang4=%f\n",&ang4);
+ fscanf(fp,"tritvl=%f\n",&tritvl);
  fscanf(fp,"f1=%f\n",&f1);
  fscanf(fp,"f2=%f\n",&f2);
  fscanf(fp,"f3=%f\n",&f3);
  fscanf(fp,"f4=%f\n",&f4);
- fscanf(fp,"anapxmin=%d\n",&anapxmin);
- fscanf(fp,"anapxmax=%d\n",&anapxmax);
- fscanf(fp,"anapxdx=%d\n",&anapxdx);
+ fscanf(fp,"anapxmin=%f\n",&anapxmin);
+ fscanf(fp,"anapxmax=%f\n",&anapxmax);
+ fscanf(fp,"anapxdx=%f\n",&anapxdx);
  fscanf(fp,"smute=%f\n",&smute);
  efclose(fp);
  time(&t1);
+ tm1=tm1/1000;
+ tm2=tm2/1000;
+ tm3=tm3/1000;
+ tm4=tm4/1000;
+ if (tm1>tmax||tm2>tmax||tm3>tmax||tm4>tmax)	err("Check tm values in data!");
  if (fmod(tritvl,anapxdx)!=0)	err("Check anapxdx value in parfile,cause that tritvl must be an integer number of anapxdx");
  if(smute!=0)	osmute=1/smute;
 
 /*caculate image spacing*/
  napmin=(int)(anapxmin/anapxdx);
  npx=(int)(anapxmax/anapxdx)-napmin+1;
- anapx=ealloc1int(npx);
+ anapx=ealloc1float(npx);
  anapx[0]=anapxmin;
  for(ipx=1;ipx<npx;ipx++)
  	anapx[ipx]=anapx[ipx-1]+anapxdx;
@@ -193,7 +210,7 @@ main(int argc, char **argv)
  maxcdpout=maxcdp-napmin;
  nstartmt=itmute=ceil(0.001*startmt/dt);
  nendmt=floor(0.001*endmt/dt);
- nkj=maxcdp-mincdp+1;
+ 
 /* Store traces in tmpfile while getting a count of number of traces */
  tracefp = etmpfile();
  hfp = etmpfile();
@@ -201,15 +218,35 @@ main(int argc, char **argv)
  do 
 	{
 	 ++ntr;
+	 /* get new deltacdp value */
+	 deltacdp=tri.cdp-oldcdp;
+
 	 /* read headers and data */
 	 efwrite(&tri,HDRBYTES, 1, hfp);
 	 efwrite(tri.data, FSIZE, nt, tracefp);
 
+	 /* error trappings. */
+	 /* ...did cdp value interval change? */
+	 if ((ntr>3) && (olddeltacdp!=deltacdp)) 
+		{
+		 if (verbose) 
+			{
+			 warn("cdp interval changed in data");	
+			 warn("ntr=%d olddeltacdp=%d deltacdp=%d",ntr,olddeltacdp,deltacdp);
+		 	 check_cdp=cwp_true;
+			}
+		}
+		
+	 /* save cdp and deltacdp values */
+	 oldcdp=tri.cdp;
+	 olddeltacdp=deltacdp;
 	} while (gettr(&tri));
 	warn("ntr=%d",ntr);
-
+/* get last cdp  and dcdp */
+ if (!getparint("dcdp",&dcdp))	dcdp=deltacdp - 1;
 /* error trappings */
  if ( (firstcdp==lastcdp) 
+	|| (dcdp==0)
 	|| (check_cdp==cwp_true) )	warn("Check cdp values in data!");
 
 /* rewind trace file pointer and header file pointer */
@@ -226,8 +263,10 @@ main(int argc, char **argv)
  nf=nfft/2+1;
  df=1.0/(nfft*dt);
  dw=2*PI*df;
-  if (verbose)	warn("nf=%d,df=%f",nf,df);
+
 /* Allocate space */
+ angx=ealloc1float(nt);
+ angxb=ealloc1float(nt);
  rt=ealloc1float(nfft);
  rtx=ealloc1float(nfft);
  ct=ealloc1complex(nf);
@@ -235,16 +274,21 @@ main(int argc, char **argv)
  filter=ealloc1float(nf);
  data=ealloc2float(nt,ntr);
  vel=ealloc2float(nt,ncdp);
- kjmin=ealloc2float(nt,nkj);
- kjmax=ealloc2float(nt,nkj);
  mig=ealloc2float(nt,npx);
 
 /* Zero all arrays */
  memset((void *) data[0], 0,nt*ntr*FSIZE);
  memset((void *) mig[0], 0,nt*npx*FSIZE);
+ memset((void *) angx, 0, nt*FSIZE);
+ memset((void *) angxb, 0, nt*FSIZE);
  memset((void *) rt, 0, nfft*FSIZE);
  memset((void *) filter, 0, nf*FSIZE);
  
+/* calculate aperture of migration */
+ angleintsmt(nt,dt,tm1,tm2,tm3,tm4,ang1,ang2,ang3,ang4,angx);
+ for(it=0;it<nt;it++)
+	angxb[it]=angx[it]*1.25;
+
 /* Read data from temporal array */
  for(itr=0;itr<ntr;++itr)
 	{
@@ -255,12 +299,6 @@ main(int argc, char **argv)
  vfp=efopen(vfile,"r");
  efread(vel[0],FSIZE,nt*ncdp,vfp);
  efclose(vfp);
- minbj=efopen(kjfile1,"r");
- efread(kjmin[0],FSIZE,nt*nkj,minbj);
- efclose(minbj);
- maxbj=efopen(kjfile2,"r");
- efread(kjmax[0],FSIZE,nt*nkj,maxbj);
- efclose(maxbj);
 
 /* Define half derivative*/
  for(ix=0;ix<nf;ix++)
@@ -276,16 +314,21 @@ main(int argc, char **argv)
  nf4=(int)(f4/df);
  if (verbose)	warn("f1=%f,f2=%f,f3=%f,f4=%f,nf1=%d,nf2=%d,nf3=%d,nf4=%d",f1,f2,f3,f4,nf1,nf2,nf3,nf4);
  hammingFilter(nf1,nf2,nf3,nf4,nf,filter);
-
+if(verbose)	
+	{
+	 fp1=fopen("filter.bin","wb");
+	 fwrite(filter,sizeof(float),nf,fp1);
+	 fclose(fp1);
+	}
 /* Start the migration process */
 /* Loop over input trace */
  warn("Starting migration process...\n");
-for(itr=0; itr<ntr; ++itr)
+ for(itr=0; itr<ntr; ++itr)
 	{
 	 efread(&tri,HDRBYTES, 1, hfp);
 	 float perc;
 	 perc=itr*100.0/(ntr-1);
-	 if(fmod(itr*100.0,ntr-1)==0 && verbose)
+	 if(fmod(itr*100.0,ntr-1)==0)
 		warn("migrated %g\n",perc);
 	 for(it=0; it<nt; ++it)
 		 rt[it]=data[itr][it];
@@ -298,22 +341,25 @@ for(itr=0; itr<ntr; ++itr)
 	 pfarc(1,nfft,rt,ct);
 	 for(ix=0;ix<nf;ix++) 
 		{	
-		 if(ix>=nf1&&ix<nf4)
-			{
-			ct[ix]=crmul(ct[ix],filter[ix-nf1]);
-			ct[ix]=crmul(ct[ix],sqrt(ix*dw));
-         	ct[ix]=cmul(ct[ix],hd[ix]);
-			}
+		 if(ix>=nf1&&ix<nf4)	ct[ix]=crmul(ct[ix],filter[ix-nf1]);
 		 else	ct[ix].r=ct[ix].i=0.0;
+		}
+
+	/* multiply by the half derivative*/ 
+	 for(ix=0;ix<nf;ix++)
+		{
+		 ct[ix]=crmul(ct[ix],sqrt(ix*dw));
+         ct[ix]=cmul(ct[ix],hd[ix]);
 		}
 	 pfacr(-1,nfft,ct,rtx);
 	 for(it=0;it<nt;it++)
 		rtx[it]=rtx[it]/nfft;
+	 /* caculate the coordinate of shot and geophone*/
 	 get_sx_gx_offset(&sx,&gx,&offset);
 	 h=offset/2;	
      cdp=(sx+gx)/2;
      icdp=(int)(cdp/anapxdx)-napmin;
-	
+
 	/* determine index of first sample to survive mute */
  	 if(smute!=0)
 		{
@@ -342,7 +388,6 @@ for(itr=0; itr<ntr; ++itr)
 				}	
 			}
 		}
-
 	/* loop in the image space*/
 	 T1=(itmute-1)*hdt;
 	 for(it=itmute;it<=nendmt;it++)
@@ -353,62 +398,46 @@ for(itr=0; itr<ntr; ++itr)
 		 if(ttt>=tmax)   break;
 		 vt=v1*T1;
 		 vtt=vt*vt;
-		 aperture(it,icdp,mincdpout,maxcdpout,&bgc,&edc,anapxdx,vt,vtt,h,kjmin[icdp-mincdp+napmin],kjmax[icdp-mincdp+napmin]);
-		 nbjl=(edc-bgc+1)*0.2;
-		 nbj1=(bgc-nbjl)>mincdpout?nbjl:(bgc-mincdpout);
-		 nbj2=(edc+nbjl)<maxcdpout?nbjl:(maxcdpout-edc);
-		 bgc=bgc-nbj1;
-		 edc=edc+nbj2;
-		 nbjl=edc-bgc-nbj1;
-		 nbjr=edc-bgc-nbj2;
-		 ix=0;
-/*------------------------------------------------------*/
-		 if(icdp>edc)		
-		 	for(ipx=edc;ipx>=bgc;ipx--) 
-				{
-				v1=vel[ipx-firstcdp+napmin][it];
-     			tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
-             	if(ttt>=tmax)   break;
-             	windtr(nt,rtx,ttt,dt,&firstt,datal);
-         	 	ints8r(8, dt, firstt, datal,
-             	  	0.0, 0.0, 1, &ttt, &va);
-			 	if(ix<nbj2)	p=sin(1.570796*ix/nbj2);
-			 	else if(ix>nbjl)	p=cos(1.570796*(ix-nbjl)/nbj1);
-			 	else p=1.0;
-			 	ix++;
-			 	mig[ipx][it]+=va*qtmp*p;
-				}
-		 else if(icdp<bgc)
-			for(ipx=bgc;ipx<=edc;ipx++) 
-				{
-				v1=vel[ipx-firstcdp+napmin][it];
-     			tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
-             	if(ttt>=tmax)   break;
-             	windtr(nt,rtx,ttt,dt,&firstt,datal);
-         	 	ints8r(8, dt, firstt, datal,
-             	  	0.0, 0.0, 1, &ttt, &va);
-			 	if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
-			 	else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
-			 	else p=1.0;
-			 	ix++;
-			 	mig[ipx][it]+=va*qtmp*p;
-				}
-		 else
-			for(ipx=bgc;ipx<=edc;ipx++) 
-				{
-				v1=vel[ipx-firstcdp+napmin][it];
-     			tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
-             	if(ttt>=tmax)   continue;
-             	windtr(nt,rtx,ttt,dt,&firstt,datal);
-         	 	ints8r(8, dt, firstt, datal,
-             	  	0.0, 0.0, 1, &ttt, &va);
-			 	if(ix<nbj1)	p=sin(1.570796*ix/nbj1);
-			 	else if(ix>nbjr)	p=cos(1.570796*(ix-nbjr)/nbj2);
-			 	else p=1.0;
-			 	ix++;
-			 	mig[ipx][it]+=va*qtmp*p;
-				}
-/*-----------------------------------------------------*/
+		 aperture(it,icdp,mincdpout,maxcdpout,&bgc,&edc,anapxdx,vt,vtt,h,angxb);
+		 windtr(nt,rtx,ttt,dt,&firstt,datal);
+		 /* sinc interpolate new data */
+		 ints8r(8, dt, firstt, datal,
+			 0.0, 0.0, 1, &ttt, &va);
+		 mig[icdp][it]+=va;
+		 p=1.0;
+		 ximg=0;
+		 for(ipx=icdp-1;ipx>bgc;ipx--)
+		 	{
+			 ximg=ximg+anapxdx;
+			 v1=vel[ipx-firstcdp+napmin][it];
+			 vt=v1*T1;
+			 tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
+             if(ttt>=tmax)   break;
+             windtr(nt,rtx,ttt,dt,&firstt,datal);
+			 /* sinc interpolate new data */
+         	 ints8r(8, dt, firstt, datal,
+             	  0.0, 0.0, 1, &ttt, &va);
+			 angtmp=(atan((ximg+h)/vt)+atan((ximg-h)/vt))*28.64789;
+			 if(angtmp>angx[it])	p=cos(6.28318*(angtmp/angx[it]-1));
+			 mig[ipx][it]+=va*qtmp*p;
+			}
+		 p=1.0;	
+		 ximg=0;
+		 for(ipx=icdp+1;ipx<edc;ipx++)
+			{
+			 ximg=ximg+anapxdx;
+             v1=vel[ipx-firstcdp+napmin][it];
+			 vt=v1*T1;
+			 tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
+             if(ttt>=tmax)   break;
+             windtr(nt,rtx,ttt,dt,&firstt,datal);
+			 /* sinc interpolate new data */
+              ints8r(8, dt, firstt, datal,
+                  0.0, 0.0, 1, &ttt, &va);
+			 angtmp=(atan((ximg+h)/vt)+atan((ximg-h)/vt))*28.64789;
+			 if(angtmp>angx[it])	p=cos(6.28318*(angtmp/angx[it]-1));
+			 mig[ipx][it]+=va*qtmp*p;
+			}
 		}
 	if(oldoffset!=offset||itr==ntr-1)
 		{
@@ -438,12 +467,12 @@ for(itr=0; itr<ntr; ++itr)
 /*free array*/
  efclose(hfp);
  efclose(tracefp);
- free1int(anapx);
  free1float(rt);
  free1float(rtx);
+ free1float(angx);
+ free1float(angxb);
+ free1float(anapx);
  free2float(vel);
- free2float(kjmin);
- free2float(kjmax);
  free1float(filter);
  free1complex(ct);
  free1complex(hd);
@@ -475,28 +504,51 @@ void hammingFilter(int nf1,int nf2,int nf3,int nf4,int nf, float *filter)
 	 else filter[i]=0;
 	}
 }
+
+void angleintsmt(int nt,float dt,float tm1,float tm2,float tm3,float tm4,float ang1,float ang2,float ang3,float ang4,float *angx)
+{
+ int it,ib;
+ float *xin,*yin,*xout;
+ float ydin[4][4];
+ xin=ealloc1float(4);
+ memset((void *) xin, 0, 4*FSIZE);
+ yin=ealloc1float(4);
+ memset((void *) yin, 0, 4*FSIZE);
+ xout=ealloc1float(nt);
+ memset((void *) xout, 0, nt*FSIZE);
+ xin[0]=tm1;
+ yin[0]=ang1;
+ xin[1]=tm2;
+ yin[1]=ang2;
+ xin[2]=tm3;
+ yin[2]=ang3;
+ xin[3]=tm4;
+ yin[3]=ang4;
+ for(it=0;it<4;it++)
+    for(ib=0;ib<4;ib++)
+        ydin[it][ib]=0;
+ for(it=0;it<nt;it++)
+    xout[it]=dt*it;
+ cakima(4,xin,yin,ydin);
+// cmonot(4,xin,yin,ydin);
+// csplin(4,xin,yin,ydin);
+// chermite(4,xin,yin,ydin);
+ intcub(0,4,xin,ydin,nt,xout,angx);
+ free1float(xin);
+ free1float(yin);
+ free1float(xout);
+}
         
-void aperture(int it,int icdp,int mincdpout,int maxcdpout,int *bgc,int *edc,int anapxdx,float vt,float vtt,float h,float *angx1,float *angx2 )
+void aperture(int it,int icdp,int mincdpout,int maxcdpout,int *bgc,int *edc,float anapxdx,float vt,float vtt,float h,float *angxb )
 {
  float x;
  float ang;
  float tanp;
- ang=angx1[it]*PI*0.005556;
- if(ang<-0.00001 || ang>0.00001)
-	{
- 	tanp=tan(ang)*tan(ang);
- 	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*bgc=MAX(mincdpout,icdp + ceil(x/anapxdx));
-	}
- else	*bgc=icdp;
- ang=angx2[it]*PI*0.005556;
- if(ang<-0.00001 || ang>0.00001)
-	{
- 	tanp=tan(ang)*tan(ang);
- 	x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))*0.5/tan(ang);
- 	*edc=MIN(maxcdpout,icdp + ceil(x/anapxdx));
-	}
- else	*edc=icdp;
+ ang=angxb[it]*PI*0.005556;
+ tanp=tan(ang)*tan(ang);
+ x=(vt*(tanp-1)+sqrt(vtt*(1+tanp)*(1+tanp)+4*h*h*tanp))/2/tan(ang);
+ *bgc=MAX(mincdpout,icdp - ceil(x/anapxdx)); 
+ *edc=MIN(maxcdpout,icdp + ceil(x/anapxdx));
 }
 
 void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp)
@@ -508,14 +560,14 @@ void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,fl
  *ttt=*ttt+*ttt;
 }
 
-void tanda(int ipx,int *anapx,int sx,int gx,float v,float T,float *ttt,float *qtmp)
+void tanda(int ipx,float *anapx,float sx,float gx,float v1,float T1,float *ttt,float *qtmp)
 {
  float xxs,xxg;
  float ts,tg;
  xxs=anapx[ipx]-sx;
  xxg=anapx[ipx]-gx;
- ts = hypotf(T,xxs/v);
- tg = hypotf(T,xxg/v);
+ ts = hypotf(T1,xxs/v1);
+ tg = hypotf(T1,xxg/v1);
  *ttt=ts+tg;
  *qtmp=pow((ts/tg),1.5);
 }
@@ -529,41 +581,42 @@ void windtr(int nt,float *rtx,float ttt,float dt,float *firstt,float *datal)
  for(itt=itb;itt<ite;++itt)
 	datal[itt-itb]=rtx[itt];
 }
-void get_sx_gx_offset(int *sx, int *gx,int *offset)
+
+void get_sx_gx_offset(float *sx, float *gx,float *offset)
 { 
   /*****************************************************************************
  get_sx_gx_offset - get sx,gx and offset from headrs
   *****************************************************************************/
-  int sy;		/* source coordinates */
-  int gy;		/* geophone coordinates */
+  float sy;		/* source coordinates */
+  float gy;		/* geophone coordinates */
  if (tri.scalco) 
 	{ 
 	 /* if tri.scalco is set, apply value */
 	 if (tri.scalco>0) 
 		{	
-		 *sx = (int) tri.sx*tri.scalco;
-		 *gx = (int) tri.gx*tri.scalco;
-		 sy = (int) tri.sy*tri.scalco;
-		 gy = (int) tri.gy*tri.scalco;
-		 *offset=(int) tri.offset*tri.scalco;
+		 *sx = (float) tri.sx*tri.scalco;
+		 *gx = (float) tri.gx*tri.scalco;
+		 sy = (float) tri.sy*tri.scalco;
+		 gy = (float) tri.gy*tri.scalco;
+		 *offset=(float) tri.offset*tri.scalco;
 		}
 	else 
 		{ 
 		 /* if tri.scalco is negative divide */
-		 *sx = (int) tri.sx/ABS(tri.scalco);
-		 *gx = (int) tri.gx/ABS(tri.scalco);
-		 sy = (int) tri.sy/ABS(tri.scalco);
-		 gy = (int) tri.gy/ABS(tri.scalco);
-		 *offset=(int) tri.offset/ABS(tri.scalco);
+		 *sx = (float) tri.sx/ABS(tri.scalco);
+		 *gx = (float) tri.gx/ABS(tri.scalco);
+		 sy = (float) tri.sy/ABS(tri.scalco);
+		 gy = (float) tri.gy/ABS(tri.scalco);
+		 *offset=(float) tri.offset/ABS(tri.scalco);
 		}
 	} 
  else 
 	{
-	 *sx = (int) tri.sx;
-	 *gx = (int) tri.gx;
-	 sy = (int) tri.sy;
-	 gy = (int) tri.gy;
-	 *offset=(int) tri.offset;
+	 *sx = (float) tri.sx;
+	 *gx = (float) tri.gx;
+	 sy = (float) tri.sy;
+	 gy = (float) tri.gy;
+	 *offset=(float) tri.offset;
 	}
  if(tri.sy||tri.gy)
 	{
@@ -573,3 +626,4 @@ void get_sx_gx_offset(int *sx, int *gx,int *offset)
 	}
  return;
 }
+

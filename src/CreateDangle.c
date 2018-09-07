@@ -1,8 +1,6 @@
 #include"time.h"
 #include "su.h"
-#include"cwp.h"
 #include "segy.h"
-#include "math.h"
 #include"header.h"
 
 /*********************** self documentation **********************/
@@ -40,7 +38,8 @@ static time_t t1,t2;
 /* Prototype of function used internally */
 void get_sx_gx_offset(float *sx, float *gx,float *offset);
 void windtr(int nt,float *rtx,float ttt,float dt,float *firstt,float *datal);
-void tanda(int ipx,float *anapx,float sx,float gx,float v,float vtt,float *ttt,float *qtmp);
+void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp);
+void tanda(int ipx,float *anapx,float sx,float gx,float v1,float T1,float *ttt,float *qtmp);
 void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,float anapxdx,float vt,float vtt,float h,float *angxx );
 void angleintsmt(int nt,float dt,float tm1,float tm2,float tm3,float tm4,float ang1,float ang2,float ang3,float ang4,float *angx);
 void hammingFilter(int nf1,int nf2,int nf3,int nf4,int nf, float *filter);
@@ -76,11 +75,13 @@ main(int argc, char **argv)
  float hdt;
  float thit;
  float tanp;             		/* tanp=pow(tan(ang),2); 				*/
- float T;						/* vertical time depth 					*/
+ float T1,T2;					/* vertical time depth 					*/
  float p;						/* Boundary attenuation factor of amp	*/
  float df,dw;					/* freqency sample spacing				*/
- float tmax;					/* the max trace length					*/
- float v;						/* velocity								*/
+ float tmax=0;					/* the max trace length					*/
+ float tmin=0;					/* the min time survive from mute		*/
+ float v1;						/* velocity1							*/
+ float v2;						/* velocity2							*/
  float vt;						/* vt=v*T								*/
  float vtt;						/* vtt=vt*vt							*/
  float ang1,ang2,ang3,ang4;		/* given migration aperture angle		*/
@@ -88,19 +89,22 @@ main(int argc, char **argv)
  float anapxmin;				/* min coordinate of imaging point		*/ 
  float anapxmax;				/* max coordinate of imaging point		*/
  float anapxdx;					/* spacing between imaging point		*/
- float startmt;					/* the start time for migration			*/
- float endmt;					/* the end time for migration			*/
- int nstartmt;					/* nstartmt=startmt/dT					*/
- int nendmt;					/* nendmt=endmt/D=dT					*/
  float ximg;					/* distance between cdp and image point	*/
  float angrange;				/* angle range of angle gather			*/
  float angdx;					/* angle interval to image in 			*/
  float angdxx;					/* angdxx=1.0/angdx						*/
+ float smute=0;					/* strech mute factor,smute=0 ->no mute */
+ float osmute;					/* osmute=1/smute					 	*/
+ float startmt;					/* the start time for migration			*/
+ float endmt;					/* the end time for migration			*/
+ int nstartmt;					/* nstartmt=startmt/dT					*/
+ int nendmt;					/* nendmt=endmt/D=dT					*/
  int nthit;						/* angle trace number calculated		*/
  int hmaxnthit;					/* hmaxnthit=ceil(angrange/angdx)		*/
  int maxnthit;					/* maxnthit=2*hmaxnthit 				*/
  int iagle;						/* count number for angle				*/
  int itr,ix,ipx,it; 			/* count number                         */
+ int itmute;					/* the start migration time for mute	*/
  int icdp;						/* count number                         */
  int nf1,nf2,nf3,nf4;           /* nf1=(int)(f1/df)                     */
  int napmin;					/* napmin=(int)(anapxmin/anapxdx)		*/
@@ -189,6 +193,7 @@ main(int argc, char **argv)
  fscanf(fp,"anapxdx=%f\n",&anapxdx);
  fscanf(fp,"angrange=%f\n",&angrange);
  fscanf(fp,"angdx=%f\n",&angdx);
+ fscanf(fp,"smute=%f\n",&smute);
  efclose(fp);
  time(&t1);
  tm1=tm1/1000;
@@ -197,6 +202,7 @@ main(int argc, char **argv)
  tm4=tm4/1000;
  if (tm1>tmax||tm2>tmax||tm3>tmax||tm4>tmax)	err("Check tm values in data!");
  if (fmod(tritvl,anapxdx)!=0)	err("Check anapxdx value in parfile,cause that tritvl must be an integer number of anapxdx");
+ if(smute!=0)	osmute=1/smute;
 
 /*caculate image spacing*/
  napmin=(int)(anapxmin/anapxdx);
@@ -211,7 +217,7 @@ main(int argc, char **argv)
  angrange=angrange+angdx*0.5;
  mincdp=mincdp-napmin;
  maxcdp=maxcdp-napmin;
- nstartmt=ceil(0.001*startmt/dt);
+ nstartmt=itmute=ceil(0.001*startmt/dt);
  nendmt=floor(0.001*endmt/dt);
 /* Store traces in tmpfile while getting a count of number of traces */
  tracefp = etmpfile();
@@ -367,17 +373,47 @@ main(int argc, char **argv)
 	 h=offset/2;	
      cdp=(sx+gx)/2;
      icdp=(int)(cdp/anapxdx)-napmin;
-	/* loop in the image space*/
-	 T=nstartmt*hdt;
-	 for(it=nstartmt;it<nendmt;it++)
+
+	 /* determine index of first sample to survive mute */
+ 	 if(smute!=0)
 		{
-		 T+=hdt;
-		 v=vel[icdp-firstcdp+napmin][it];
-		 vt=v*T;
+		tmin=0;
+		itmute=nstartmt;
+	 	T2=(nstartmt-2)*hdt;
+	 	for(it=nstartmt;it<=nendmt;it++)
+			{
+		 	T2+=hdt;
+		 	v2=vel[icdp-firstcdp+napmin][it-1];
+		 	T1=T2+hdt;
+		 	v1=vel[icdp-firstcdp+napmin][it];
+		 	mutefct(h,hdt,v1,T1,v2,T2,&ttt,&qtmp);
+		 	if	(qtmp<osmute)	tmin=ttt;
+			}
+	 	T1=(nendmt+1)*hdt;
+	 	for(it=nendmt;it>=nstartmt;it--)
+			{
+		 	T1-=hdt;
+		 	v1=vel[icdp-firstcdp+napmin][it];
+ 		 	ttt=2*hypotf(T1,h/v1);
+		 	if(ttt<=tmin)
+				{
+				itmute=it;
+				break;
+				}	
+			}
+		}
+
+	/* loop in the image space*/
+	 T1=(itmute-1)*hdt;
+	 for(it=itmute;it<=nendmt;it++)
+		{
+		 v1=vel[icdp-firstcdp+napmin][it];
+		 T1+=hdt;
+		 ttt=2*hypotf(T1,h/v1);
+		 if(ttt>=tmax)   break;
+		 vt=v1*T1;
 		 vtt=vt*vt;
 		 aperture(it,icdp,mincdp,maxcdp,&bgc,&edc,anapxdx,vt,vtt,h,angxx);
-		 tanda(icdp,anapx,sx,gx,v,vtt,&ttt,&qtmp);
-		 if(ttt>=tmax)   break;
 		 windtr(nt,rtx,ttt,dt,&firstt,datal);
 		 /* sinc interpolate new data */
 		 ints8r(8, dt, firstt, datal,
@@ -388,12 +424,12 @@ main(int argc, char **argv)
 		 for(ipx=icdp-1;ipx>=bgc;ipx--)
 		 	{
 			 ximg=ximg+anapxdx;
-			 v=vel[ipx-firstcdp+napmin][it];
-			 vt=v*T;
+			 v1=vel[ipx-firstcdp+napmin][it];
+			 vt=v1*T1;
 			 vtt=vt*vt;
 			 calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
 			 if(nthit==1000000)	break;
-			 tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+			 tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              if(ttt>=tmax)   break;
              windtr(nt,rtx,ttt,dt,&firstt,datal);
 			 /* sinc interpolate new data */
@@ -407,12 +443,12 @@ main(int argc, char **argv)
 		 for(ipx=icdp+1;ipx<=edc;ipx++)
 			{
 			 ximg=ximg+anapxdx;
-			 v=vel[ipx-firstcdp+napmin][it];
-			 vt=v*T;
+			 v1=vel[ipx-firstcdp+napmin][it];
+			 vt=v1*T1;
 			 vtt=vt*vt;
 			 calculateangle(ximg,angrange,angdx,angdxx,h,vt,vtt,&thit,&nthit);
 			 if(nthit==1000000)    break;
-			 tanda(ipx,anapx,sx,gx,v,vtt,&ttt,&qtmp);
+			 tanda(ipx,anapx,sx,gx,v1,T1,&ttt,&qtmp);
              if(ttt>=tmax)   break;
              windtr(nt,rtx,ttt,dt,&firstt,datal);
 			 /* sinc interpolate new data */
@@ -531,14 +567,23 @@ void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,float anap
  *edc=MIN(maxcdp,icdp + ceil(x/anapxdx));
 }
 
-void tanda(int ipx,float *anapx,float sx,float gx,float v,float vtt,float *ttt,float *qtmp)
+void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp)
+{
+ float ttmp;
+ ttmp= hypotf(T2,h/v2);
+ *ttt= hypotf(T1,h/v1);
+ *qtmp=(*ttt-ttmp)/hdt;
+ *ttt=*ttt+*ttt;
+}
+
+void tanda(int ipx,float *anapx,float sx,float gx,float v1,float T1,float *ttt,float *qtmp)
 {
  float xxs,xxg;
  float ts,tg;
  xxs=anapx[ipx]-sx;
  xxg=anapx[ipx]-gx;
- ts=sqrt(xxs*xxs+vtt)/v;
- tg=sqrt(xxg*xxg+vtt)/v;
+ ts = hypotf(T1,xxs/v1);
+ tg = hypotf(T1,xxg/v1);
  *ttt=ts+tg;
  *qtmp=pow((ts/tg),1.5);
 }
@@ -602,8 +647,8 @@ void calculateangle(float ximg,float angrange,float angdx,float angdxx,float h,f
 {
 int nth;
 float thitc,thitcc;
-thitc=(ximg*ximg-h*h-vtt)*0.5/ximg/vt;
-thitc=thitc+sqrt(thitc*thitc+1);
+thitc=(ximg*ximg-h*h-vtt)/(2*ximg*vt);
+thitc=thitc+hypotf(thitc,1);
 thitc=atan(thitc)*57.2957795;
 *thit=thitc;
 /*thit=28.6478897*(atan((ximg+h)/vt)+atan((ximg-h)/vt)); two method to caculate the angles,test shows,the effect of latter method is lower*/
