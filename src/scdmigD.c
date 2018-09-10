@@ -396,8 +396,8 @@ for(itr=0; itr<ntr; itr++)
 				}
 			}
 		/* loop in the image space*/
-	 	T1=(itmute-1)*hdt;
-	 	for(it=itmute;it<=endmt;it++)
+	 	T1=itmute*hdt;
+	 	for(it=itmute;it<endmt;it++)
 			{
 			v1=vel[ipx-firstcdp+napmin][it];
 		 	T1+=hdt;

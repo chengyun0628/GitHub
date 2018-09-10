@@ -404,8 +404,8 @@ main(int argc, char **argv)
 		}
 
 	/* loop in the image space*/
-	 T1=(itmute-1)*hdt;
-	 for(it=itmute;it<=nendmt;it++)
+	 T1=itmute*hdt;
+	 for(it=itmute;it<nendmt;it++)
 		{
 		 v1=vel[icdp-firstcdp+napmin][it];
 		 T1+=hdt;

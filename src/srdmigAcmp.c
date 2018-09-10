@@ -282,11 +282,39 @@ main(int argc, char **argv)
  warn("Starting migration process...\n");
 for(itr=0; itr<ntr; ++itr)
 	{
-	 efread(&tri,HDRBYTES, 1, hfp);
 	 float perc;
 	 perc=itr*100.0/(ntr-1);
 	 if(fmod(itr*100.0,ntr-1)==0 && verbose)
 		warn("migrated %g\n",perc);
+
+	 efread(&tri,HDRBYTES, 1, hfp);
+	 get_sx_gx_offset(&sx,&gx,&offset);
+	 if(oldoffset!=offset)
+		{
+		 memset ((void *) &tro, (int) '\0', sizeof (tro));
+ 		 tro.trid = 1;
+ 		 tro.counit = 1;
+		 tro.f2=mincdp*anapxdx;
+		 tro.d2 = anapxdx;
+     	 tro.ns = nt;
+     	 tro.dt = dt*1000000;
+		 /* Output migrated data */
+		 mincdpo=mincdp;
+ 		 for(ipx=mincdpout; ipx<=maxcdpout; ++ipx)
+    		{
+     		 tro.cdp = mincdpo;
+     		 tro.offset=fabs(oldoffset);
+     		 memcpy ((void *) tro.data, (const void *)  mig[ipx],sizeof (float) * nt);
+     		 puttr(&tro);
+     		 mincdpo++;
+    		}
+		 oldoffset=offset;
+		 memset((void *) mig[0], 0,nt*npx*FSIZE);
+		}
+	 h=offset/2;	
+     cdp=(sx+gx)/2;
+     icdp=(int)(cdp/anapxdx)-napmin;
+
 	 for(it=0; it<nt; ++it)
 		 rt[it]=data[itr][it];
 
@@ -309,10 +337,6 @@ for(itr=0; itr<ntr; ++itr)
 	 pfacr(-1,nfft,ct,rtx);
 	 for(it=0;it<nt;it++)
 		rtx[it]=rtx[it]/nfft;
-	 get_sx_gx_offset(&sx,&gx,&offset);
-	 h=offset/2;	
-     cdp=(sx+gx)/2;
-     icdp=(int)(cdp/anapxdx)-napmin;
 	
 	/* determine index of first sample to survive mute */
  	 if(smute!=0)
@@ -344,8 +368,8 @@ for(itr=0; itr<ntr; ++itr)
 		}
 
 	/* loop in the image space*/
-	 T1=(itmute-1)*hdt;
-	 for(it=itmute;it<=nendmt;it++)
+	 T1=itmute*hdt;
+	 for(it=itmute;it<nendmt;it++)
 		{
 		 T1+=hdt;
 		 v1=vel[icdp-firstcdp+napmin][it];
@@ -410,7 +434,7 @@ for(itr=0; itr<ntr; ++itr)
 				}
 /*-----------------------------------------------------*/
 		}
-	if(oldoffset!=offset||itr==ntr-1)
+	if(itr==ntr-1)
 		{
 		 memset ((void *) &tro, (int) '\0', sizeof (tro));
  		 tro.trid = 1;
@@ -429,8 +453,6 @@ for(itr=0; itr<ntr; ++itr)
      		 puttr(&tro);
      		 mincdpo++;
     		}
-		 oldoffset=offset;
-		 memset((void *) mig[0], 0,nt*npx*FSIZE);
 		}
 	}
  time(&t2);
