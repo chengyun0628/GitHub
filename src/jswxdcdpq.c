@@ -10,7 +10,7 @@ char *sdoc[] = {NULL};
  * Trace header fields modified: 
  */
 /**************** end self doc ***********************************/
-void wxd(int nt,int nx,int fd,int hwid, int hnx,int smpitnum,float dt,float iasmp,float aratio,float arati,float **datact,float *angxx,float *minkjj,float *maxkjj);
+void wxd(int nt,int hnx,int fd,int hwid,int bts,int ets,int smpitnum,float dt,float iasmp,float **data,float *angx,float *minkj,float *maxkj);
 segy tr;                        /* trace of input  						*/
 segy tro;                       /* trace of output  					*/
 int
@@ -19,40 +19,39 @@ main(int argc, char **argv)
  float **data;					/* ang_array of 2D real trace			*/
  float **datact;				/* ang_array of 2D real trace			*/
  float **datao;					/* ang_array of 2D real trace			*/
- float **minkj;
- float **maxkj;
- float **angx;
- float *minkjj;
- float *maxkjj;
- float *angxx;
- float dt;						/* sample interval						*/
- float dx;
- float iasmp;
- float aratio;
- float arati;
+ float **angxf;					/* array for scanned Dip angle field	*/
+ float **minkjf;				/* array for the min aperture field		*/
+ float **maxkjf;				/* array for the max aperture field		*/
+ float *angx;					/* array for scanned Dip angle			*/
+ float *minkj;					/* array for the min aperture			*/
+ float *maxkj;					/* array for the max aperture			*/
+ float dt;						/* sample interval in time				*/
+ float dx;						/* sample interval in space				*/
+ float iasmp;					/* sample interval in angle				*/
  float kjl,kjr;
- int smpitnum;					/* sample point number to express aperture. 3,5,7...31.*/
- int mincdp;
- int widlth;
- int hwid;
- int fd;
- int maxag;
+ int mincdp;					/* cdp information on headers			*/
  int nt;                		/* number of points on input trace      */
  int ntr;						/* number of trace input				*/
- int nx;
- int hnx;						
- int sntr;
- int hsntr;
+ int nx;						/* number of trace per angle gather		*/
+ int hnx;						/* half of the nx						*/
+ int sntr;						/* number of cdp gathers				*/
+ int hsntr;						/* half of the sntr						*/
+ int bts,ets;					/* begain time and end time for scanning,(ms)	*/
+ int smpitnum;					/* sample point number to express aperture. 3,5,7...31.*/
+ int widlth;					/* scanning window length in time		*/
+ int hwid;						/* half of the scanning window length	*/
+ int fd;						/* the dominant frequency of the data	*/
+ int maxag;						/* the max Dip angle of angle gather	*/
  int itr,it,ix; 				/* count number                         */
  int verbose;		            /* flag to get advisory messages	    */
 
 /* file name */
  FILE *tracefp=NULL;	        /*  file to hold traces             */
- FILE *hfp=NULL;		        /* file to hold trace headers      */
- FILE *fp1;
- FILE *fp2;
- FILE *fp3;
- cwp_Bool seismic;	            /* is this seismic data?		        */
+ FILE *hfp=NULL;		        /* file to hold trace headers      	*/
+ FILE *fp1;						/* file to hold kjminf      		*/
+ FILE *fp2;						/* file to hold kjmaxf      		*/
+ FILE *fp3;						/* file to hold angxf      			*/
+ cwp_Bool seismic;	            /* is this seismic data?		    */
  cwp_Bool check_cdp=cwp_false;
 
 /* Initialize */
@@ -84,16 +83,18 @@ main(int argc, char **argv)
  if (!getparint("mincdp",&mincdp)) mincdp=tr.cdp; 
  if (!getparfloat("dx",&dx)) 
 	{
-	 dx=6.;
-	 warn("dx not set,assumed to be 6.(m)");
+	 dx=1.;
+	 warn("dx not set,assumed to be 1.(m)");
 	}
+ if (!getparint("bts",&bts)) bts=0;
+ if (!getparint("ets",&ets)) ets=nt*dt*1000;
  if (!getparint("smpitnum",&smpitnum)) smpitnum=13;
  if (!getparint("maxag",&maxag)) maxag=-tr.f2;
  if (!getparfloat("iasmp",&iasmp)) iasmp=tr.d2;
  if (!getparint("widlth",&widlth)) widlth = 11;
  if (!getparint("fd",&fd)) fd =20;
- if (!getparfloat("arati",&arati)) arati =0.95;
- if (!getparfloat("aratio",&aratio)) aratio =0.2;
+ bts=bts/(dt*1000);
+ ets=ets/(dt*1000);
  smpitnum=1+0.5*(31-smpitnum);
  hwid=(widlth-1)*0.5;
  iasmp=1/iasmp;
@@ -118,22 +119,22 @@ main(int argc, char **argv)
  erewind(hfp);
 /* Allocate space */
  data=ealloc2float(nt,ntr);
- datao=ealloc2float(nt,sntr);
- angx=ealloc2float(nt,sntr);
- minkj=ealloc2float(nt,sntr);
- maxkj=ealloc2float(nt,sntr);
  datact=ealloc2float(nt,nx);
- angxx=ealloc1float(nt);
- minkjj=ealloc1float(nt);
- maxkjj=ealloc1float(nt);
+ datao=ealloc2float(nt,sntr);
+ angxf=ealloc2float(nt,sntr);
+ minkjf=ealloc2float(nt,sntr);
+ maxkjf=ealloc2float(nt,sntr);
+ angx=ealloc1float(nt);
+ minkj=ealloc1float(nt);
+ maxkj=ealloc1float(nt);
 
 /* Zero all arrays */
  memset((void *) data[0], 0,nt*ntr*FSIZE);
- memset((void *) datao[0], 0,nt*sntr*FSIZE);
- memset((void *) angx[0], 0,nt*sntr*FSIZE);
- memset((void *) minkj[0], 0,nt*sntr*FSIZE);
- memset((void *) maxkj[0], 0,nt*sntr*FSIZE);
  memset((void *) datact[0], 0,nt*nx*FSIZE);
+ memset((void *) datao[0], 0,nt*sntr*FSIZE);
+ memset((void *) angxf[0], 0,nt*sntr*FSIZE);
+ memset((void *) minkjf[0], 0,nt*sntr*FSIZE);
+ memset((void *) maxkjf[0], 0,nt*sntr*FSIZE);
 /* load traces into the zero-offset array and close tmpfile */
  efread(*data, FSIZE, nt*ntr, tracefp);
  efclose(tracefp);
@@ -143,13 +144,12 @@ main(int argc, char **argv)
 	 for(ix=0;ix<nx;ix++)
 		for(it=0;it<nt;it++)
 			datact[ix][it]=data[itr*nx+ix][it];
-	 memset((void *) angxx, 0,nt*FSIZE);
-	 wxd(nt,nx,fd,hwid,hnx,smpitnum,dt,iasmp,aratio,arati,datact,angxx,minkjj,maxkjj);
+	 wxd(nt,hnx,fd,hwid,bts,ets,smpitnum,dt,iasmp,datact,angx,minkj,maxkj);
 	 for(it=0;it<nt;it++)
 	 	{
-		 angx[itr][it]=angxx[it];
-		 minkj[itr][it]=minkjj[it];
-		 maxkj[itr][it]=maxkjj[it];
+		 angxf[itr][it]=angx[it];
+		 minkjf[itr][it]=minkj[it];
+		 maxkjf[itr][it]=maxkj[it];
 		}
 	}
  for(itr=hsntr;itr>=0;itr--)
@@ -157,37 +157,36 @@ main(int argc, char **argv)
 	 for(ix=0;ix<nx;ix++)
 		for(it=0;it<nt;it++)
 			datact[ix][it]=data[itr*nx+ix][it];
-	 memset((void *) angxx, 0,nt*FSIZE);
-	 wxd(nt,nx,fd,hwid,hnx,smpitnum,dt,iasmp,aratio,arati,datact,angxx,minkjj,maxkjj);
+	 wxd(nt,hnx,fd,hwid,bts,ets,smpitnum,dt,iasmp,datact,angx,minkj,maxkj);
 	 for(it=0;it<nt;it++)
 		{
-		angx[itr][it]=angxx[it];
-		minkj[itr][it]=minkjj[it];
-		maxkj[itr][it]=maxkjj[it];
+		angxf[itr][it]=angx[it];
+		minkjf[itr][it]=minkj[it];
+		maxkjf[itr][it]=maxkj[it];
 		}
 	}
  for(itr=0;itr<sntr;itr++)
 	for(it=0;it<nt;it++)
 		{
-		if(minkj[itr][it]<-maxag)	minkj[itr][it]=-maxag;
-		if(maxkj[itr][it]>maxag)	maxkj[itr][it]=maxag;
-		if(minkj[itr][it]>maxkj[itr][it])	minkj[itr][it]=maxkj[itr][it];
-		kjl=minkj[itr][it]*iasmp+hnx;
-		kjr=maxkj[itr][it]*iasmp+hnx;
+		if(minkjf[itr][it]<-maxag)	minkjf[itr][it]=-maxag;
+		if(maxkjf[itr][it]>maxag)	maxkjf[itr][it]=maxag;
+		if(minkjf[itr][it]>maxkjf[itr][it])	minkjf[itr][it]=maxkjf[itr][it];
+		kjl=minkjf[itr][it]*iasmp+hnx;
+		kjr=maxkjf[itr][it]*iasmp+hnx;
 		for(ix=kjl;ix<=kjr;ix++)
 			datao[itr][it]+=data[itr*nx+ix][it];
 		}
-
+/* output angle and aperture file in .bin */
  fp1=fopen("kjmin","wb");
- fwrite(minkj[0],sizeof(float),nt*sntr,fp1);
+ fwrite(minkjf[0],sizeof(float),nt*sntr,fp1);
  fclose(fp1);
  fp2=fopen("kjmax","wb");
- fwrite(maxkj[0],sizeof(float),nt*sntr,fp2);
+ fwrite(maxkjf[0],sizeof(float),nt*sntr,fp2);
  fclose(fp2);
  fp3=fopen("xang","wb");
- fwrite(angx[0],sizeof(float),nt*sntr,fp3);
+ fwrite(angxf[0],sizeof(float),nt*sntr,fp3);
  fclose(fp3);
-/* set header */
+/* set header and output trace */
  memset ((void *) &tro, (int) '\0', sizeof (tro));
  tro.trid = 1;
  tro.counit = 1;
@@ -206,93 +205,88 @@ for(itr=0;itr<sntr;itr++)
  free2float(data);
  free2float(datact);
  free2float(datao);
- free2float(minkj);
- free2float(maxkj);
- free1float(minkjj);
- free1float(maxkjj);
- free1float(angxx);
+ free2float(minkjf);
+ free2float(maxkjf);
+ free1float(minkj);
+ free1float(maxkj);
+ free1float(angx);
  return(CWP_Exit());	
 }
-void wxd(int nt,int nx,int fd,int hwid, int hnx,int smpitnum,float dt,float iasmp,float aratio,float arati,float **datact,float *angxx,float *minkjj,float *maxkjj)
+void wxd(int nt,int hnx,int fd,int hwid,int bts,int ets,int smpitnum,float dt,float iasmp,float **data,float *angx,float *minkj,float *maxkj)
 {
- float *stk1;
- float *stk2;				
+ float *stk;				
  float *itint;
  float *itout;
- float *tmpa;
  float *tmpx;
+ float *tmpa;
  float *tmpl;
  float *tmpr;
  float *Atmpcut;
- float atmpl;
- float atmpr;
+ float atmp0;
  float atmp1;
  float atmp2;
  float atmp3;
- float tmpv;
- float tmpvx;
- float tmpvl;
- float tmpvr;
  float abg;
  float aed;
  float Tofd;
  float agtmp;
- float avg;
  int cys[15];
  int cyse[31];
  int cysz[255];
  int nter=10;
  int fdwid=30;
+ int nx;
  int widmv;
- int widlthx;
- int itbg;
- int ited;
+ int widlth;
  int mnf;
+ int itbg,ited;
  int iabg,iaed;
- int itr,inf,it,itx,ia,ifd,iter,AG1,FD1,AG2; 			/* count number */
+ int AG1,AG2;
+ int FD1;
+ int ix,inf,it,itx,ia,ifd,iter; 			/* count number */
  int j,k;
  for(iter=0;iter<15;iter++)
 	cys[iter]=3+2*iter;
- widlthx=hwid+hwid+1;
- stk1=ealloc1float(nt);
- stk2=ealloc1float(nt);
+ widlth=hwid+hwid+1;
+ nx=hnx+hnx+1;
+ stk=ealloc1float(nt);
  itint=ealloc1float(nt);
  itout=ealloc1float(nt);
- tmpl=ealloc1float(nt);
- tmpr=ealloc1float(nt);
  tmpx=ealloc1float(nt);
  tmpa=ealloc1float(nt);
- Atmpcut=ealloc1float(widlthx);
- memset((void *) stk1, 0,nt*FSIZE);
+ tmpl=ealloc1float(nt);
+ tmpr=ealloc1float(nt);
+ Atmpcut=ealloc1float(widlth);
+ memset((void *) stk, 0,nt*FSIZE);
+ memset((void *) itint, 0,nt*FSIZE);
+ memset((void *) tmpx, 0,nt*FSIZE);
+ memset((void *) tmpa, 0,nt*FSIZE);
  memset((void *) tmpl, 0,nt*FSIZE);
  memset((void *) tmpr, 0,nt*FSIZE);
- memset((void *) tmpx, 0,nt*FSIZE);
- memset((void *) itint, 0,nt*FSIZE);
- memset((void *) tmpa, 0,nt*FSIZE);
 /* stacking data along angle */
  for(it=0;it<nt;it++)
     itout[it]=it*dt;
- for(itr=0;itr<nx;itr++)
+ for(ix=0;ix<nx;ix++)
 	for(it=0;it<nt;it++)
-		stk1[it]+=datact[itr][it];
- ifd=0;
+		stk[it]+=data[ix][it];
+ inf=0;
  for(iter=0;iter<15;iter++)
 	{
 	widmv=(int)(nt/cys[iter]+1);
  	for(it=0;it<nt;it+=widmv)
 		{
-		cysz[ifd]=it;
-		atmpl=fabs(stk1[it]);
+		cysz[inf]=it;
+		atmp0=fabs(stk[it]);
 		for(itx=it+1;itx<it+widmv;itx++)
 			{
 			if(itx==nt-1) break;
-			if(atmpl<fabs(stk1[itx]))
+			if(atmp0<fabs(stk[itx]))
 				{
-				cysz[ifd]=itx;
-				atmpl=fabs(stk1[itx]);
+				cysz[inf]=itx;
+				atmp0=fabs(stk[itx]);
 				}
 			}
-		ifd++;
+		inf++;
 		}
 	}
  for(iter=0;iter<31;iter++)
@@ -303,8 +297,8 @@ void wxd(int nt,int nx,int fd,int hwid, int hnx,int smpitnum,float dt,float iasm
 		if(cysz[it]==cysz[224+iter])	cyse[iter]+=1;
 		}
 	}
-mnf=0;
-for(iter=0;iter<31;iter++)
+ mnf=0;
+ for(iter=0;iter<31;iter++)
 	if(cyse[iter]>=smpitnum)
 		{
 		tmpx[mnf]=cysz[224+iter];
@@ -313,17 +307,19 @@ for(iter=0;iter<31;iter++)
  k=1;
  for(inf=0;inf<mnf;inf++)
 	{
-	FD1=fd;
+	 FD1=fd;
 	 it=tmpx[inf];
+	 if(it<bts) continue;
+	 if(it>ets) break;
 	 itbg=it-hwid;
 	 ited=it+hwid+1;
 	for(iter=0;iter<nter;iter++)
 		{
 		Tofd=it*dt*FD1*2;
 		atmp2=0;
-	 	for(itr=0;itr<nx;itr++)
+	 	for(ix=0;ix<nx;ix++)
 			{
-		 	agtmp=(itr-hnx)*0.017453/iasmp;
+		 	agtmp=(ix-hnx)*0.017453/iasmp;
 		 	abg=(Tofd*sin(agtmp)-sqrt(Tofd+Tofd-1))/cos(agtmp)/(Tofd-1);
 		 	aed=(Tofd*sin(agtmp)+sqrt(Tofd+Tofd-1))/cos(agtmp)/(Tofd-1);
 	 	 	iabg=(int)(atan(abg)*57.29578*iasmp);
@@ -336,17 +332,17 @@ for(iter=0;iter<31;iter++)
 				}
 	 	 	iabg=iabg>-hnx?iabg+hnx:0;
 	 	 	iaed=iaed<hnx?iaed+hnx:nx-1;
-		 	memset((void *) Atmpcut, 0,widlthx*FSIZE);
+		 	memset((void *) Atmpcut, 0,widlth*FSIZE);
 		 	for(itx=itbg;itx<ited;itx++)
 		 		for(ia=iabg;ia<=iaed;ia++)
-			 		Atmpcut[itx-itbg]+=datact[ia][itx];
+			 		Atmpcut[itx-itbg]+=data[ia][itx];
 		 	atmp1=0;
-		 	for(itx=0;itx<widlthx;itx++)
+		 	for(itx=0;itx<widlth;itx++)
 				atmp1+=fabs(Atmpcut[itx]);
 		 	if(atmp1>atmp2)
 				{
 				atmp2=atmp1;
-				tmpa[k]=itr;
+				tmpa[k]=ix;
 				}
 			}
 		AG1=tmpa[k];
@@ -367,15 +363,17 @@ for(iter=0;iter<31;iter++)
 				}
 	 	 	iabg=iabg>-hnx?iabg+hnx:0;
 	 	 	iaed=iaed<hnx?iaed+hnx:nx-1;
-			memset((void *) Atmpcut, 0,widlthx*FSIZE);
+			memset((void *) Atmpcut, 0,widlth*FSIZE);
 		 	for(itx=itbg;itx<ited;itx++)
 		 		for(ia=iabg;ia<=iaed;ia++)
-			 		Atmpcut[itx-itbg]+=datact[ia][itx];
+			 		Atmpcut[itx-itbg]+=data[ia][itx];
 		 	atmp1=0;
-		 	for(itx=0;itx<widlthx;itx++)
+		 	for(itx=0;itx<widlth;itx++)
 				atmp1+=fabs(Atmpcut[itx]);
 			if(atmp1>atmp2)
 				{
+				tmpl[k]=iabg;
+				tmpr[k]=iaed;
 				atmp2=atmp1;
 				FD1=ifd;
 				}
@@ -385,146 +383,109 @@ for(iter=0;iter<31;iter++)
 			AG2=AG1;
 			continue;
 			}
-		if(AG1-AG2<1||iter==nter-1)	
-			{
-			tmpl[k]=iabg;
-			tmpr[k]=iaed;
-			for(ia=iabg;ia<=iaed;ia++)
-				tmpv+=datact[ia][it];
+		if(fabs(AG1-AG2)<2)	
 			break;
-			}
 		AG2=AG1;
 		}
+	iabg=tmpl[k];
+	iaed=tmpr[k];
+	atmp0=0;
+	for(ia=iabg;ia<=iaed;ia++)
+		atmp0+=data[ia][it];
+	atmp1=atmp0;
+	atmp2=fabs(atmp1);
 	if(iaed==(nx-1)) iaed=nx-2;
 	if(iabg==0)	iabg=1;
-	tmpvx=tmpv;
-	tmpvl=fabs(tmpvx);
-	if(tmpvl<fabs(tmpv+datact[iaed+1][it]))
+	if(atmp2<fabs(atmp0+data[iaed+1][it]))
 		for(ia=iaed+1;ia<nx;ia++)
 			{
-			tmpvx+=datact[ia][it];
-			tmpvr=fabs(tmpvx);
-			if(tmpvl<tmpvr)
+			atmp1+=data[ia][it];
+			atmp3=fabs(atmp1);
+			if(atmp2<atmp3)
 				{
-				tmpvl=tmpvr;
+				atmp2=atmp3;
 				tmpr[k]=ia;
 				}
 			else break;
 			} 
-	/*else 
-		for(ia=iaed;ia>=0;ia--)
+	else 
+		for(ia=iaed;ia>hnx;ia--)
 			{
-			tmpvx-=datact[ia][it];
-			tmpvr=fabs(tmpvx);
-			if(tmpvl<tmpvr)
+			atmp1-=data[ia][it];
+			atmp3=fabs(atmp1);
+			if(atmp2<atmp3)
 				{
-				tmpvl=tmpvr;
+				atmp2=atmp3;
 				tmpr[k]=ia;
 				}
 			else break;
-			} */
-	tmpvx=tmpv;
-	tmpvl=fabs(tmpvx);
-	if(tmpvl<fabs(tmpv+datact[iabg-1][it]))
+			}
+	atmp1=atmp0;
+	atmp2=fabs(atmp1);
+	if(atmp2<fabs(atmp0+data[iabg-1][it]))
 		for(ia=iabg-1;ia>=0;ia--)
 			{
-			tmpvx+=datact[ia][it];
-			tmpvr=fabs(tmpvx);
-			if(tmpvl<tmpvr)
+			atmp1+=data[ia][it];
+			atmp3=fabs(atmp1);
+			if(atmp2<atmp3)
 				{
-				tmpvl=tmpvr;
+				atmp2=atmp3;
 				tmpl[k]=ia;
 				}
 			else break;
 			} 
-	/*else 
-		for(ia=iabg;ia<nx;ia++)
+	else 
+		for(ia=iabg;ia<hnx;ia++)
 			{
-			tmpvx-=datact[ia][it];
-			tmpvr=fabs(tmpvx);
-			if(tmpvl<tmpvr)
+			atmp1-=data[ia][it];
+			atmp3=fabs(atmp1);
+			if(atmp2<atmp3)
 				{
-				tmpvl=tmpvr;
+				atmp2=atmp3;
 				tmpl[k]=ia;
 				}
 			else break;
 			} 
-
-	/*atmpl=0;
-	for(itr=tmpa[k];itr>=0;itr--)
-		atmpl+=datact[itr][it];
-	atmpl=fabs(atmpl);
-	atmpr=0;
-	for(itr=tmpa[k]+1;itr<nx;itr++)
-		atmpr+=datact[itr][it];
-	atmpr=fabs(atmpr);
-	atmp1=0;
-	for(itr=tmpa[k];itr>=0;itr--)
-		{
-		atmp2=atmp1;
-		atmp1+=datact[itr][it];
-		atmp3=fabs(atmp1);
-		if(atmp3>=atmpl*arati && fabs(atmp2)>=atmp3)
-			{	
-			 tmpl[k]=(itr-hnx)/iasmp;
-		 	 break;
-			}
-		else	tmpl[k]=-hnx/iasmp;
-		}
-	atmp2=0;
-	for(itr=tmpa[k]+1;itr<nx;itr++)
-		{
-		atmp1=atmp2;
-		atmp2+=datact[itr][it];
-		atmp3=fabs(atmp2);
-		if(atmp3>=atmpr*arati && fabs(atmp1)>=atmp3)
-			{	
-			tmpr[k]=(itr-hnx)/iasmp;
-		 	 break; 
-			}
-		else	tmpr[k]=hnx/iasmp;
-		}*/
 	itint[k]=it*dt;
 	k++;
 	}
  itint[k]=nt*dt;
-tmpa[0]=tmpa[1];
-tmpa[k]=tmpa[k-1];
-tmpl[0]=tmpl[1];
+ tmpa[0]=tmpa[1];
+ tmpa[k]=tmpa[k-1];
+ tmpl[0]=tmpl[1];
  tmpl[k]=tmpl[k-1];
  tmpr[0]=tmpr[1];
  tmpr[k]=tmpr[k-1];
  k++;
- //intlin(k, itint, tmpa, tmpa[0], tmpa[k-1], nt, itout, angxx);
- //intlin(k, itint, tmpl, tmpl[0], tmpl[k-1], nt, itout, minkjj);
- //intlin(k, itint, tmpr, tmpr[0], tmpr[k-1], nt, itout, maxkjj);
+ //intlin(k, itint, tmpa, tmpa[0], tmpa[k-1], nt, itout, angx);
+ //intlin(k, itint, tmpl, tmpl[0], tmpl[k-1], nt, itout, minkj);
+ //intlin(k, itint, tmpr, tmpr[0], tmpr[k-1], nt, itout, maxkj);
  float ydin[k][4];
-memset((void *) ydin[0], 0, k*4*FSIZE);
-cmonot(k,itint,tmpa,ydin);
-intcub(0,k,itint,ydin,nt,itout,angxx);
+ memset((void *) ydin[0], 0, k*4*FSIZE);
+ cmonot(k,itint,tmpa,ydin);
+ intcub(0,k,itint,ydin,nt,itout,angx);
 
  memset((void *) ydin[0], 0, k*4*FSIZE);
  cmonot(k,itint,tmpl,ydin);
- intcub(0,k,itint,ydin,nt,itout,minkjj);
+ intcub(0,k,itint,ydin,nt,itout,minkj);
 
-memset((void *) ydin[0], 0, k*4*FSIZE);
+ memset((void *) ydin[0], 0, k*4*FSIZE);
  cmonot(k,itint,tmpr,ydin);
- intcub(0,k,itint,ydin,nt,itout,maxkjj);
-for(it=0;it<nt;it++)
+ intcub(0,k,itint,ydin,nt,itout,maxkj);
+ for(it=0;it<nt;it++)
 	{
-	angxx[it]=(angxx[it]-hnx)/iasmp;
-	maxkjj[it]=(maxkjj[it]-hnx)/iasmp;
-	minkjj[it]=(minkjj[it]-hnx)/iasmp;
+	angx[it]=(angx[it]-hnx)/iasmp;
+	maxkj[it]=(maxkj[it]-hnx)/iasmp;
+	minkj[it]=(minkj[it]-hnx)/iasmp;
 	}
 
 /*free array*/
-free1float(stk1);
-free1float(stk2);
-free1float(itint);
-free1float(itout);
-free1float(tmpl);
-free1float(tmpr);
-free1float(tmpx);
-free1float(tmpa);
-free1float(Atmpcut);
+ free1float(stk);
+ free1float(itint);
+ free1float(itout);
+ free1float(tmpx);
+ free1float(tmpa);
+ free1float(tmpl);
+ free1float(tmpr);
+ free1float(Atmpcut);
 }
