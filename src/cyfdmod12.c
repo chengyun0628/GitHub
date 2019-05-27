@@ -563,7 +563,7 @@ Author:  Dave Hale, Colorado School of Mines, 03/01/90
 	
 	/* compute time-dependent part of source function */
 	tdelay = 1.0/fpeak;
-	if (t>2.0*tdelay && mono==0) return;
+	if (t>2.0*tdelay) return;
 	ts = ricker(t-tdelay,fpeak,mono);
 	p[xs][zs]=sstrength*ts;
 	}
@@ -595,7 +595,7 @@ Author:  Dave Hale, Colorado School of Mines, 04/29/90
 	if (mono==0) 
 		return exp(-xx)*(1.0-2.0*xx);
 	else 
-		return sin(4*x);
+		return sin(x);
 	}
 
 /* make 12 order coefficient */
