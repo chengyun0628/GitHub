@@ -208,7 +208,7 @@ main(int argc, char **argv)
  	anapx[ipx]=anapx[ipx-1]+anapxdx;
  mincdpout=mincdp-napmin;
  maxcdpout=maxcdp-napmin;
- nstartmt=itmute=ceil(0.001*startmt/dt)+1;
+ nstartmt=itmute=ceil(0.001*startmt/dt);
  nendmt=floor(0.001*endmt/dt);
  
 /* Store traces in tmpfile while getting a count of number of traces */
@@ -397,7 +397,7 @@ if(verbose)
 		 	T1=T2+hdt;
 		 	v1=vel[icdp-firstcdp+napmin][it];
 		 	mutefct(h,hdt,v1,T1,v2,T2,&ttt,&qtmp);
-		 	if	(qtmp<osmute)	tmin=ttt;
+		 	if	(qtmp<osmute)	tmin=ttt;	
 			}
 	 	T1=(nendmt+1)*hdt;
 	 	for(it=nendmt;it>=nstartmt;it--)
@@ -413,8 +413,8 @@ if(verbose)
 			}
 		}
 	/* loop in the image space*/
-	 T1=(itmute-1)*hdt;
-	 for(it=itmute;it<=nendmt;it++)
+	 T1=itmute*hdt;
+	 for(it=itmute;it<nendmt;it++)
 		{
 		 T1+=hdt;
 		 v1=vel[icdp-firstcdp+napmin][it];
@@ -586,10 +586,14 @@ void tanda(int ipx,float *anapx,float sx,float gx,float v1,float T1,float *ttt,f
 {
  float xxs,xxg;
  float ts,tg;
+ //float Vtt;
+ //Vtt=v1*T1*v1*T1;
  xxs=anapx[ipx]-sx;
  xxg=anapx[ipx]-gx;
  ts = hypotf(T1,xxs/v1);
  tg = hypotf(T1,xxg/v1);
+ //ts = sqrt(xxs*xxs+Vtt)/v1;
+ //tg = sqrt(xxg*xxg+Vtt)/v1;
  *ttt=ts+tg;
  *qtmp=pow((ts/tg),1.5);
 }
@@ -600,6 +604,7 @@ void windtr(int nt,float *rtx,float ttt,float dt,float *firstt,float *datal)
  itb=MAX(ceil(ttt/dt)-4,0);
  ite=MIN(itb+8,nt);
  *firstt=itb*dt;
+ memset((void *) datal, 0, 8*FSIZE);
  for(itt=itb;itt<ite;++itt)
 	datal[itt-itb]=rtx[itt];
 }

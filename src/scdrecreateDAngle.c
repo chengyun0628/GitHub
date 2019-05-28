@@ -27,7 +27,7 @@ NULL};
 /* Credit
  *
  * Note:
- *
+ * geometry is int type,receiver interval is int type
  * Trace header fields accessed:
  * Trace header fields modified: 
  */
@@ -36,10 +36,10 @@ NULL};
 static time_t t1,t2;
 
 /* Prototype of function used internally */
-void get_sx_gx_offset(int *sx, int *gx,int *offset);
+void get_sx_gx_offset(float *sx, float *gx,float *offset);
 void windtr(int nt,float *rtw,float ttt,float dt,float *firstt,float *datal);
 void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,float *qtmp);
-void tanda(int ipx,int *anapx,int sx,int gx,float v1,float T1,float *ttt,float *qtmp);
+void tanda(int ipx,int *anapx,float sx,float gx,float v1,float T1,float *ttt,float *qtmp);
 void aperture(int it,int icdp,int mincdp,int maxcdp,int *bgc,int *edc,int anapxdx,float vt,float vtt,float h,float *angx1,float *angx2 );
 void hammingFilter(int nf1,int nf2,int nf3,int nf4,int nf, float *filter);
 void calculateangle(int ximg,float angrange,float angdx,float angdxx,int h,float vt,float vtt,float *thit,int *nthit);
@@ -80,12 +80,15 @@ main(int argc, char **argv)
  float angdx;					/* angle interval to image in 			*/
  float angdxx;					/* angdxx=1.0/angdx						*/
  float thit;   
+ float sx,gx;					/* coordinate of shot and geophone  	*/
+ float offset;					/* offset of source and receiver 		*/
+ float oldoffset;				/* tmp value for co group devide		*/
  float h;						/*  half of offset  					*/
  float smute=0;					/* strech mute factor,smute=0 ->no mute */
  float osmute;					/* osmute=1/smute					 	*/
+ float *offx;  					/* store each co gather's offset		*/
  
  int ximg;
- int *offx;  					/* store each co gather's offset		*/
  int *offarr;					/* store ~'s first trace num			*/ 
  int *mincdpx;					/* store ~'s min cdp num				*/
  int *maxcdpx;					/* store ~'s max cdp num				*/
@@ -98,11 +101,8 @@ main(int argc, char **argv)
  int minoff,maxoff;				/* min & max offset of data input		*/
  int noff;						/* co group num for data input			*/ 
  int tritvl;					/* trace interval						*/
- int sx,gx;						/* coordinate of shot and geophone  	*/
  int oldcdp;					/* tmp value for cdp counter			*/
  int oldcdpt;					/* tmp value for cdp counter			*/
- int oldoffset;					/* tmp value for co group devide		*/
- int offset;					/* offset and half of that 				*/
  int startmt,endmt;				/* the start & end time for migration	*/
  int itmute;					/* the start migration time for mute	*/
  int hmaxnthit;					/* hmaxnthit=ceil(angrange/angdx)		*/
@@ -233,10 +233,10 @@ main(int argc, char **argv)
  
  /* Allocate space */
  offarr=ealloc1int(noff);
- offx=ealloc1int(noff);
  dcdp=ealloc1int(noff);
  mincdpx=ealloc1int(noff);
  maxcdpx=ealloc1int(noff);
+ offx=ealloc1float(noff);
 
  /* Zero all arrays */
  memset((void *) offarr, 0, noff*FSIZE);
@@ -628,8 +628,8 @@ for(icdp=0;icdp<ncdp;icdp++)
  free1int(mincdpx);
  free1int(maxcdpx);
  free1int(dcdp);
- free1int(offx);
  free1int(offarr);
+ free1float(offx);
  free1float(rt);
  free2float(vel);
  free2float(kjmin);
@@ -703,7 +703,7 @@ void mutefct(float h,float hdt,float v1,float T1,float v2,float T2,float *ttt,fl
  *ttt=*ttt+*ttt;
 }
 
-void tanda(int ipx,int *anapx,int sx,int gx,float v1,float T1,float *ttt,float *qtmp)
+void tanda(int ipx,int *anapx,float sx,float gx,float v1,float T1,float *ttt,float *qtmp)
 {
  float xxs,xxg;
  float ts,tg;
@@ -746,7 +746,7 @@ if(thitc<angrange)
  *nthit=nth;
 }
 
-void get_sx_gx_offset(int *sx, int *gx,int *offset)
+void get_sx_gx_offset(float *sx, float *gx,float *offset)
 { 
   /*****************************************************************************
  get_sx_gx_offset - get sx,gx and offset from headrs
